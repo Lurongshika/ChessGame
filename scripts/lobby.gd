@@ -191,8 +191,8 @@ func send_profile(name: String, avatar_data: Dictionary) -> void:
 	sync_room_info.rpc(Global.game_mode, Global.standard_mode)
 	_sync_players.rpc(_players_to_data())
 	if Global.net_role == "host" and _has_arg("--auto-start"):
-		var need := 2 if Global.game_mode != "four" else 4
-		if players.size() >= need:
+		# 自动测试:至少主机就开局,人数不满由机器人补全
+		if players.size() >= 1:
 			call_deferred("_start_game")
 
 
@@ -513,6 +513,30 @@ func _start_game() -> void:
 			"color": players[pid]["color"],
 			"pid": pid,
 		}
+	# 四人模式人数不满:自动用机器人补全空缺 side
+	if Global.game_mode == "four":
+		var used_col := {}
+		for side in Global.player_colors:
+			used_col[Global.player_colors[side]] = true
+		for side in sides:
+			if lobby_players.has(side):
+				continue
+			var ai_color := -1
+			for ci in Global.COLORS16.size():
+				if not used_col.has(ci):
+					ai_color = ci
+					break
+			if ai_color < 0:
+				ai_color = randi() % Global.COLORS16.size()
+			used_col[ai_color] = true
+			Global.player_colors[side] = ai_color
+			lobby_players[side] = {
+				"name": "机器人",
+				"avatar_data": {"username": "机器人", "color": [0.5, 0.5, 0.55]},
+				"color": ai_color,
+				"pid": -1,
+				"is_ai": true,
+			}
 	Global.from_lobby = true
 	start_game.rpc(Global.player_colors, Global.game_mode, Global.standard_mode, lobby_players)
 

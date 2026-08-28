@@ -1098,14 +1098,25 @@ func client_ready4() -> void:
 		return
 	_four_ready_done[pid] = true
 	four_ready_count += 1
-	print("NET4: client ready pid=", pid, " count=", four_ready_count, "/", four_side_to_peer.size())
-	# 所有人齐(host 自己 + 3 客户端)才开局
-	if four_ready_count >= three_peers4():
+	print("NET4: client ready pid=", pid, " count=", four_ready_count, "/", _real_client_count4())
+	# 所有真实客户端都 ready 才开局(机器人无需 ready)
+	if four_ready_count >= _real_client_count4():
 		_begin_four_draft_host()
 
 
 func three_peers4() -> int:
 	return 3
+
+
+# 真实客户端数量(lobby_players 中 pid>0 且非 AI 的,不含 host)
+func _real_client_count4() -> int:
+	var n := 0
+	for side in Global.lobby_players:
+		var info: Dictionary = Global.lobby_players[side]
+		var pid := int(info.get("pid", -1))
+		if pid > 1 and not bool(info.get("is_ai", false)):
+			n += 1
+	return maxi(n, 1)
 
 
 # 主机:开始四人 DRAFT(自己选 + 给每个客户端发其方的选项)
@@ -1126,11 +1137,29 @@ func _begin_four_draft_host() -> void:
 	for side in four_side_to_peer:
 		if side == my_side:
 			continue
+		var peer: int = four_side_to_peer[side]
+		if peer <= 0:
+			continue  # 机器人补位方无客户端,不发送
 		side_to_group[side] = gi
 		var opts: Array = groups[gi]
-		var peer: int = four_side_to_peer[side]
 		send_four_draft_options.rpc_id(peer, side, opts, Global.perk_pool)
 		gi += 1
+	# 机器人补位方:自动随机选 3 个技能
+	for side in Global.lobby_players:
+		var si: int = int(side)
+		var info: Dictionary = Global.lobby_players[side]
+		# 跳过 host 自己和真实客户端;仅 AI 补位方自动选
+		if si == my_side or not bool(info.get("is_ai", false)):
+			continue
+		var ai_group: Array = groups[gi] if gi < groups.size() else []
+		gi += 1
+		if ai_group.is_empty():
+			continue
+		ai_group.shuffle()
+		four_draft_picks[si] = [ai_group[0], ai_group[1], ai_group[2]]
+		perks4[si] = {}
+		for id in four_draft_picks[si]:
+			perks4[si][id] = true
 	# host 自己选
 	draft4_side = my_side
 	draft4_round = 0
@@ -1177,16 +1206,22 @@ func send_four_draft_picks(side: int, picks: Array) -> void:
 # 主机:检查四方是否都选完
 func _check_four_draft_done() -> void:
 	var my_side: int = my_side4 if my_side4 >= 0 else 1
+	# 检查所有有玩家的 side(含机器人)都选完
+	var all_sides: Array = []
 	for side in four_side_to_peer:
+		all_sides.append(side)
+	for side in Global.lobby_players:
+		if not int(side) in all_sides:
+			all_sides.append(int(side))
+	for side in all_sides:
 		if four_draft_picks[side].is_empty() and side != my_side:
 			return
 	if four_draft_picks[my_side].is_empty():
 		return
 	# 组装 perks4 并广播开局
 	var all_picks := {}
-	for side in four_side_to_peer:
+	for side in all_sides:
 		all_picks[str(side)] = four_draft_picks[side]
-	all_picks[str(my_side)] = four_draft_picks[my_side]
 	start_four_game.rpc(all_picks, Global.perk_pool)
 
 
@@ -4703,6 +4738,32 @@ func _begin_turn4() -> void:
 	_refresh_perk_panels4()
 	_update_status4()
 	queue_redraw()
+	# 机器人补位:轮到 AI 方自动走子(主机权威执行并广播)
+	_maybe_ai4()
+
+
+# 四人:当前方是机器人时自动走子(仅 host 执行并广播)
+func _maybe_ai4() -> void:
+	if winner4 >= 0 or phase != Phase.PLAY:
+		return
+	if net_role != "host" and net_role != "local":
+		return
+	var side := current_side4()
+	var info: Dictionary = Global.lobby_players.get(side, {})
+	if not bool(info.get("is_ai", false)):
+		return
+	# 延迟走子,模拟思考
+	await get_tree().create_timer(0.6).timeout
+	if winner4 >= 0 or phase != Phase.PLAY or current_side4() != side:
+		return
+	var perks_arr: Array = [perks4[0], perks4[1], perks4[2], perks4[3]]
+	var mv: Dictionary = AI.choose_move4(board, side, perks_arr)
+	if mv.is_empty():
+		return
+	if net_role == "host":
+		on_move4.rpc(mv["from"], mv["to"])
+	else:
+		_try_move4(mv["from"], mv["to"])
 
 
 func _turn_action_cap4() -> int:

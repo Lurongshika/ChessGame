@@ -11,6 +11,7 @@ const VALUES := {
 	R.Type.ROOK: 9.0,
 	R.Type.CANNON: 4.5,
 	R.Type.PAWN: 1.0,
+	R.Type.QUEEN: 12.0,
 }
 
 
@@ -32,6 +33,44 @@ static func choose_move(board: Array, side: int, perks_red: Dictionary, perks_bl
 					best_score = score
 					best = {"from": pos, "to": t}
 	return best
+
+
+# 四人模式 AI:四方棋盘 17×17,perks4 是 4 元素数组
+static func choose_move4(board: Array, side: int, perks4: Array) -> Dictionary:
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var best := {}
+	var best_score := -INF
+	for r in board.size():
+		for c in board[r].size():
+			var pos := Vector2i(c, r)
+			var p = board[r][c]
+			if p == null or p["side"] != side:
+				continue
+			for t in R.raw_moves4(board, pos, perks4):
+				var score := _score_move4(board, pos, t, side, perks4)
+				score += rng.randf_range(-0.5, 0.5)
+				if score > best_score:
+					best_score = score
+					best = {"from": pos, "to": t}
+	return best
+
+
+static func _score_move4(board: Array, from: Vector2i, to: Vector2i, side: int, perks4: Array) -> float:
+	var res := R.apply_move(board, from, to)
+	var nb: Array = res["board"]
+	var captured = res["captured"]
+	var score := 0.0
+	if captured != null:
+		if captured["type"] == R.Type.KING:
+			return 100000.0
+		var v: float = VALUES.get(captured["type"], 1.0)
+		score += v * 10.0
+		score += v * 5.0
+	# 轻微中心倾向(四人中心 8,8)
+	var center := Vector2i(8, 8)
+	score += 0.1 * (10.0 - float((to - center).length()))
+	return score
 
 
 static func _score_move(board: Array, from: Vector2i, to: Vector2i, side: int, perks_red: Dictionary, perks_black: Dictionary) -> float:
