@@ -413,9 +413,13 @@ func _mode_name4() -> String:
 
 # 右上角 2×2 胜利进度面板
 func _build_progress_panel4() -> void:
+	# 棋盘正下方一排:四方胜利进度横排(不与右上角头像重叠)
 	var panel := Panel.new()
-	panel.position = Vector2(1280 - 300, 8)
-	panel.size = Vector2(284, 96)
+	var pwidth := 560
+	var px := (1280 - pwidth) / 2
+	var py := 632  # 棋盘下边缘 615 之下
+	panel.position = Vector2(px, py)
+	panel.size = Vector2(pwidth, 34)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.1, 0.12, 0.16, 0.7)
 	sb.set_corner_radius_all(8)
@@ -423,18 +427,21 @@ func _build_progress_panel4() -> void:
 	sb.set_border_width_all(1)
 	panel.add_theme_stylebox_override("panel", sb)
 	ui.add_child(panel)
-	# 2×2:上排 黑(1)蓝(3),下排 红(0)绿(2)
-	var cells := {1: Vector2(8, 8), 3: Vector2(148, 8), 0: Vector2(8, 52), 2: Vector2(148, 52)}
-	for side in cells:
-		var pos: Vector2 = cells[side]
+	# 一排 4 格:黑(1)红(0)绿(2)蓝(3)
+	var cell_w := 128
+	var order := [1, 0, 2, 3]
+	for i in order.size():
+		var side: int = order[i]
+		var cx := 8 + i * (cell_w + 8)
 		var color_dot := ColorRect.new()
 		color_dot.color = _side_color(side)
-		color_dot.position = pos
+		color_dot.position = Vector2(cx, 9)
 		color_dot.size = Vector2(14, 14)
 		panel.add_child(color_dot)
 		var l := _make_label("", 12, Color(0.9, 0.9, 0.85))
-		l.position = pos + Vector2(20, 0)
-		l.size = Vector2(120, 16)
+		l.position = Vector2(cx + 20, 8)
+		l.size = Vector2(cell_w - 22, 18)
+		l.add_theme_font_size_override("font_size", 12)
 		panel.add_child(l)
 		_progress_labels4[side] = l
 	_update_progress4()
