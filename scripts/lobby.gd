@@ -79,7 +79,7 @@ func _ready() -> void:
 	scroll.add_child(players_box)
 
 	# 底部:16 色选择板
-	var color_title := _make_label("选择己方棋子颜色(已被选择则禁用)", 18, Color(0.9, 0.8, 0.6))
+	var color_title := _make_label("选择己方棋子颜色", 18, Color(0.9, 0.8, 0.6))
 	color_title.position = Vector2(370, 490)
 	color_title.size = Vector2(400, 30)
 	add_child(color_title)
