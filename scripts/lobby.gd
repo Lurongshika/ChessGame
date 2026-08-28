@@ -3,6 +3,7 @@ extends Control
 
 const Profile := preload("res://scripts/profile_util.gd")
 const ChatPanel := preload("res://scripts/chat_panel.gd")
+const CustomOptions := preload("res://scripts/custom_options.gd")
 
 # 16 种棋子颜色预设(Global 共享)
 const COLORS16 := Global.COLORS16
@@ -15,6 +16,7 @@ var color_box: HBoxContainer
 var start_btn: Button
 var chat: Panel
 var info_label: Label  # 左侧房间信息(加入端同步)
+var custom_opts: Panel  # 自定义对局规则面板
 var _font_cache: Font
 
 
@@ -81,14 +83,10 @@ func _ready() -> void:
 	color_title.position = Vector2(370, 490)
 	color_title.size = Vector2(400, 30)
 	add_child(color_title)
-	var color_scroll := ScrollContainer.new()
-	color_scroll.position = Vector2(370, 525)
-	color_scroll.size = Vector2(700, 70)
-	add_child(color_scroll)
 	color_box = HBoxContainer.new()
-	color_box.custom_minimum_size = Vector2(16 * 56, 0)
+	color_box.position = Vector2(370, 525)
 	color_box.add_theme_constant_override("separation", 8)
-	color_scroll.add_child(color_box)
+	add_child(color_box)
 	_build_color_palette()
 
 	# 开始/准备按钮(主机=开始对局,加入方=准备)
@@ -99,7 +97,7 @@ func _ready() -> void:
 		start_btn = _make_button("准备", Vector2(540, 620), Vector2(200, 52))
 		start_btn.pressed.connect(_request_ready)
 	add_child(start_btn)
-	var back := _make_button("返回菜单", Vector2(20, 620), Vector2(140, 44))
+	var back := _make_button("返回菜单", Vector2(1280 - 140 - 20, 620), Vector2(140, 44))
 	back.pressed.connect(func():
 		multiplayer.multiplayer_peer = null
 		get_tree().change_scene_to_file("res://scenes/main.tscn")
@@ -110,6 +108,17 @@ func _ready() -> void:
 	chat = ChatPanel.new()
 	chat.setup(_font(), _send_chat)
 	add_child(chat)
+
+	# 聊天框上方:自定义选项按钮
+	var opts_btn := _make_button("自定义选项", Vector2(20, 720 - 40 - 240 - 50), Vector2(150, 42))
+	opts_btn.pressed.connect(func():
+		if custom_opts == null:
+			custom_opts = CustomOptions.new()
+			custom_opts.setup(_font(), func(_r): pass)
+			add_child(custom_opts)
+		custom_opts.visible = true
+	)
+	add_child(opts_btn)
 	_net_init()
 
 

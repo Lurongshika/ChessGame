@@ -94,22 +94,22 @@ func _show_net_create() -> void:
 	net_players = 2
 	net_mode_btns = []
 	var mode_title := _label("选择模式", 24, Color(0.9, 0.85, 0.75))
-	mode_title.position = Vector2(0, 180)
+	mode_title.position = Vector2(0, 150)
 	mode_title.size = Vector2(1280, 30)
 	mode_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	opt_root.add_child(mode_title)
-	var skill_btn := _button("技能模式", Vector2(430, 220))
+	var skill_btn := _button("技能模式", Vector2(430, 200))
 	skill_btn.pressed.connect(func(): _set_net_mode("skill"))
 	opt_root.add_child(skill_btn)
 	net_mode_btns.append(skill_btn)
-	var std_btn := _button("标准模式", Vector2(650, 220))
+	var std_btn := _button("标准模式", Vector2(650, 200))
 	std_btn.pressed.connect(func(): _set_net_mode("standard"))
 	opt_root.add_child(std_btn)
 	net_mode_btns.append(std_btn)
 	_refresh_net_mode_highlight()
 	net_players_btns = []
 	var p_title := _label("选择人数", 24, Color(0.9, 0.85, 0.75))
-	p_title.position = Vector2(0, 270)
+	p_title.position = Vector2(0, 260)
 	p_title.size = Vector2(1280, 30)
 	p_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	opt_root.add_child(p_title)
@@ -122,7 +122,7 @@ func _show_net_create() -> void:
 	opt_root.add_child(p4_btn)
 	net_players_btns.append(p4_btn)
 	_refresh_net_players_highlight()
-	_add_option_button("创建房间", Vector2(540, 380), func():
+	_add_option_button("创建房间", Vector2(540, 420), func():
 		Global.port = Global.port
 		Global.game_mode = "four" if net_players == 4 else "pvp"
 		Global.standard_mode = net_mode == "standard"
@@ -131,7 +131,7 @@ func _show_net_create() -> void:
 		Global.net_role = "host"
 		get_tree().change_scene_to_file("res://scenes/lobby.tscn")
 	)
-	_add_option_button("返回", Vector2(540, 450), _show_net_options)
+	_add_option_button("返回", Vector2(540, 500), _show_net_options)
 
 
 # 加入在线对战:输入 IP/端口 → 加入房间 → 等候大厅
@@ -141,7 +141,7 @@ func _show_net_join() -> void:
 	opt_root = _make_option_layer()
 	var ip_edit := LineEdit.new()
 	ip_edit.placeholder_text = "对方 IP/域名(留空=本机)"
-	ip_edit.position = Vector2(390, 280)
+	ip_edit.position = Vector2(455, 280)
 	ip_edit.size = Vector2(250, 40)
 	ip_edit.add_theme_font_override("font", _font())
 	ip_edit.add_theme_font_size_override("font_size", 17)
@@ -149,7 +149,7 @@ func _show_net_join() -> void:
 	var port_edit := LineEdit.new()
 	port_edit.text = str(Global.port)
 	port_edit.placeholder_text = "端口"
-	port_edit.position = Vector2(650, 280)
+	port_edit.position = Vector2(725, 280)
 	port_edit.size = Vector2(100, 40)
 	port_edit.add_theme_font_override("font", _font())
 	port_edit.add_theme_font_size_override("font_size", 17)

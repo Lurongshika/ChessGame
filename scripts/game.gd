@@ -95,6 +95,8 @@ var targeting4 := {}
 var actions_left4 := 1
 var first_moved4 := Vector2i(-1, -1)
 var draft4_side := 0        # 四人 DRAFT:当前选技能方
+var kill_count4 := {0: 0, 1: 0, 2: 0, 3: 0}  # 四人杀棋计数
+var grey_side4 := -1           # 将帅被杀后变灰保留的方(-1=无)
 var draft4_round := 0
 var draft4_options: Array = []
 var _draft_selected4: Array = []  # 四人 DRAFT:当前方已点选的技能(最多 3 个)
@@ -4240,8 +4242,13 @@ func _draw_pieces4() -> void:
 			draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(15, 15), Vector2(30, 30)), false, Color(0.3, 0.22, 0.14))
 			draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(14, 14), Vector2(28, 28)), false, Color(0.95, 0.9, 0.78))
 			var sid: int = p["side"]
+			# 将帅被杀后变灰:该方棋子灰色渲染
+			var piece_col: Color = _side_color(sid)
+			if grey_side4 == sid:
+				piece_col = Color(0.55, 0.55, 0.55)
+				draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(14, 14), Vector2(28, 28)), false, Color(0.5, 0.5, 0.5))
 			var name: String = R.PIECE_NAMES[p["type"]] if (sid == 0 or sid == 2) else R.PIECE_NAMES_BLACK[p["type"]]
-			_draw_text(center + Vector2(2, -1), name, 16, _side_color(sid))
+			_draw_text(center + Vector2(2, -1), name, 16, piece_col)
 
 
 func _draw_overlay4() -> void:
@@ -4378,8 +4385,8 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 	selected4 = Vector2i(-1, -1)
 	moves4 = []
 	first_moved4 = to
-	# 任意兵走到棋盘正中心(8,8)变为"后":八向不限距离移动
-	if mover["type"] == R.Type.PAWN and to == Vector2i(8, 8):
+	# 任意兵走到棋盘正中心(8,8)变为"后"(升变规则可关闭)
+	if mover["type"] == R.Type.PAWN and to == Vector2i(8, 8) and Global.game_rules.get("promotion", "queen") == "queen":
 		var row: Array = board[to.y]
 		var piece: Dictionary = row[to.x]
 		piece["type"] = R.Type.QUEEN
@@ -4394,27 +4401,16 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 			last_eat4 = {"side": side, "type": mover["type"]}
 		_handle_capture4(captured, to, side)
 		if captured["type"] == R.Type.KING:
-			var dead: int = captured["side"]
-			alive4[dead] = false
-			_remove_pieces4(dead)
-			_show_status4("%s 的王被吃,出局!" %  SIDE_NAMES4[dead])
-			var alive_list: Array = []
-			for s in alive4:
-				if alive4[s]:
-					alive_list.append(s)
-			if alive_list.size() <= 1:
-				winner4 = alive_list[0] if alive_list.size() == 1 else -1
-				if winner4 >= 0:
-					_show_status4("游戏结束:%s 获胜!" %  SIDE_NAMES4[winner4])
-				else:
-					_show_status4("平局")
-				queue_redraw()
+			# 应用自定义规则(获胜方式/将帅被杀后处理)
+			var result := _handle_king_captured4(captured["side"], side)
+			if result == "winner":
 				return
-			turn4 += 1
-			while not alive4[current_side4()]:
+			if result == "continue":
 				turn4 += 1
-			_begin_turn4()
-			return
+				while not alive4[current_side4()]:
+					turn4 += 1
+				_begin_turn4()
+				return
 	# 命运之轮(进阶):协同棋子移动不消耗步数
 	if not from in sync_pieces4:
 		actions_left4 -= 1
@@ -4425,6 +4421,145 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 		_update_status4()
 	_refresh_pope_guard4(side)
 	_refresh_pope_guard4(_next_alive4(side))
+	# 占领模式:走子后检查中心占领
+	if Global.game_rules.get("win_mode", "classic") == "occupy":
+		var occ := _occupy_winner4()
+		if occ >= 0:
+			winner4 = occ
+			_show_status4("游戏结束:%s 占领中心获胜!" % SIDE_NAMES4[occ])
+			queue_redraw()
+
+
+# 王被吃:按自定义规则处理,返回 "winner"(游戏结束) / "continue"(继续)
+func _handle_king_captured4(dead: int, killer: int) -> String:
+	var rules: Dictionary = Global.game_rules
+	var win_mode: String = rules.get("win_mode", "classic")
+	var kill_count: int = int(rules.get("kill_count", 2))
+
+	if win_mode == "kills":
+		# 杀棋计数:杀棋次数 +1,被杀方半场恢复开局状态(半场内敌方棋子全摧毁)
+		kill_count4[dead] += 1
+		_show_status4("%s 被杀棋(%d/%d)!" % [SIDE_NAMES4[dead], kill_count4[dead], kill_count])
+		_restore_arm4(dead)
+		if kill_count4[dead] >= kill_count:
+			winner4 = killer
+			_show_status4("游戏结束:%s 达成 %d 次杀棋,获胜!" % [SIDE_NAMES4[killer], kill_count])
+			queue_redraw()
+			return "winner"
+		# 被杀方继续(王被吃但按规则不判负,王由杀棋方继承或重生?)
+		# 规则:将帅被杀后处理在非 kills 模式;kills 模式杀棋后王移除但方继续
+		alive4[dead] = true  # 继续游戏
+		_remove_king_only4(dead)
+		queue_redraw()
+		return "continue"
+
+	# classic / occupy:王被吃则出局
+	alive4[dead] = false
+	# 将帅被杀后处理(先处理棋子再移除王)
+	var king_down: String = rules.get("king_down", "grey")
+	if king_down == "inherit":
+		_show_status4("%s 的王被吃,棋子继承给 %s!" % [SIDE_NAMES4[dead], SIDE_NAMES4[killer]])
+		_inherit_pieces4(dead, killer)
+	elif king_down == "grey":
+		_show_status4("%s 的王被吃,棋子变灰保留!" % SIDE_NAMES4[dead])
+		_grey_keep_pieces4(dead)
+	else:
+		_show_status4("%s 的王被吃,出局!" % SIDE_NAMES4[dead])
+		_remove_pieces4(dead)
+	# 检查胜利
+	if win_mode == "occupy":
+		# 占领:检查是否有人占中心 5 点中 3 个
+		var occ_winner := _occupy_winner4()
+		if occ_winner >= 0:
+			winner4 = occ_winner
+			_show_status4("游戏结束:%s 占领中心获胜!" % SIDE_NAMES4[occ_winner])
+			queue_redraw()
+			return "winner"
+	var alive_list: Array = []
+	for s in alive4:
+		if alive4[s]:
+			alive_list.append(s)
+	if alive_list.size() <= 1:
+		winner4 = alive_list[0] if alive_list.size() == 1 else -1
+		if winner4 >= 0:
+			_show_status4("游戏结束:%s 获胜!" % SIDE_NAMES4[winner4])
+		else:
+			_show_status4("平局")
+		queue_redraw()
+		return "winner"
+	return "continue"
+
+
+# 杀棋计数:半场恢复开局状态,半场内敌方棋子全部摧毁
+func _restore_arm4(side: int) -> void:
+	# 记录该方半场范围
+	var arm: Dictionary = R.ARMS4.get(side, {})
+	var min_x: int = arm.get("min_x", 0)
+	var max_x: int = arm.get("max_x", 16)
+	var min_y: int = arm.get("min_y", 0)
+	var max_y: int = arm.get("max_y", 16)
+	# 摧毁半场内所有敌方棋子
+	for r in board.size():
+		for c in board[r].size():
+			if r >= min_y and r <= max_y and c >= min_x and c <= max_x:
+				var p = board[r][c]
+				if p != null and p["side"] != side:
+					board[r][c] = null
+	# 恢复该方棋子到开局状态
+	var init := R.make_board4()
+	for r in board.size():
+		for c in board[r].size():
+			var ip = init[r][c]
+			if ip != null and ip["side"] == side:
+				board[r][c] = ip
+			elif ip == null and (r < min_y or r > max_y or c < min_x or c > max_x):
+				pass  # 半场外不动
+	queue_redraw()
+
+
+# 杀棋计数:移除王(该方继续,王被吃但不判负)
+func _remove_king_only4(side: int) -> void:
+	for r in board.size():
+		for c in board[r].size():
+			var p = board[r][c]
+			if p != null and p["side"] == side and p["type"] == R.Type.KING:
+				board[r][c] = null
+
+
+# 将帅被杀后-继承:该方棋子给杀棋方
+func _inherit_pieces4(dead: int, killer: int) -> void:
+	for r in board.size():
+		for c in board[r].size():
+			var p = board[r][c]
+			if p != null and p["side"] == dead:
+				p["side"] = killer
+	queue_redraw()
+
+
+# 将帅被杀后-变灰:棋子保留但灰化(仅移除王)
+func _grey_keep_pieces4(dead: int) -> void:
+	grey_side4 = dead
+	# 移除王(王已被吃),其他棋子保留灰化
+	for r in board.size():
+		for c in board[r].size():
+			var p = board[r][c]
+			if p != null and p["side"] == dead and p["type"] == R.Type.KING:
+				board[r][c] = null
+	queue_redraw()
+
+
+# 占领模式:检查是否有人占据中心 5 点中 3 个
+func _occupy_winner4() -> int:
+	var center_spots := [Vector2i(8, 8), Vector2i(7, 8), Vector2i(9, 8), Vector2i(8, 7), Vector2i(8, 9)]
+	var counts := {0: 0, 1: 0, 2: 0, 3: 0}
+	for spot in center_spots:
+		var p = board[spot.y][spot.x]
+		if p != null:
+			counts[p["side"]] = counts.get(p["side"], 0) + 1
+	for s in counts:
+		if counts[s] >= 3 and alive4[s]:
+			return s
+	return -1
 
 
 func _handle_capture4(captured: Dictionary, captured_pos: Vector2i, attacker_side: int) -> void:
