@@ -178,6 +178,7 @@ var _status4_until := 0.0   # 四人:状态提示显示到此刻(秒),之后恢�
 var _four_frames: Array = []  # 四人:四方头像框 {frame, side}
 var _four_mode_label: Label  # 左上角当前模式
 var _progress_labels4 := {}  # 右上角进度: side -> Label
+var _my_turn_breath4 := false  # 自己回合呼吸显示
 var my_info := {}
 var enemy_info := {}
 
@@ -3252,6 +3253,10 @@ func _process(delta: float) -> void:
 		if Time.get_ticks_msec() / 1000.0 >= _status4_until:
 			_status4_until = 0.0
 			_update_status4()
+	# 自己回合:"你的回合"呼吸(透明度正弦脉动)
+	if four_mode and _my_turn_breath4 and status_label != null and _status4_until <= 0.0:
+		var pulse := 0.55 + 0.45 * sin(_glow_time * 4.0)
+		status_label.modulate.a = pulse
 
 
 func _win(side: int, reason := "") -> void:
@@ -4743,12 +4748,26 @@ func _remove_pieces4(dead: int) -> void:
 func _update_status4() -> void:
 	if status_label != null:
 		var side := current_side4()
-		var nm: String = ""
-		if Global.lobby_players.has(side):
-			nm = Global.lobby_players[side].get("name", "")
-		if nm.is_empty():
-			nm = SIDE_NAMES4[side]
-		status_label.text = "回合：" + nm
+		if my_side4 >= 0:
+			# 联机:轮到自己的方显示"你的回合"(呼吸),否则等待对方
+			if side == my_side4:
+				status_label.text = "你的回合"
+				_my_turn_breath4 = true
+			else:
+				var nm2: String = ""
+				if Global.lobby_players.has(side):
+					nm2 = Global.lobby_players[side].get("name", SIDE_NAMES4[side])
+				status_label.text = "等待 %s..." % nm2
+				_my_turn_breath4 = false
+		else:
+			# 本地四人:显示当前方回合名
+			var nm: String = ""
+			if Global.lobby_players.has(side):
+				nm = Global.lobby_players[side].get("name", "")
+			if nm.is_empty():
+				nm = SIDE_NAMES4[side]
+			status_label.text = "回合：" + nm
+			_my_turn_breath4 = false
 		status_label.modulate = _side_color(side)
 
 # 四人:状态提示(技能反馈等),1 秒后恢复回合显示
