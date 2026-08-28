@@ -30,8 +30,8 @@ func setup(font: Font, on_change: Callable) -> void:
 	_on_change = on_change
 	load_rules()
 
-	position = Vector2(340, 300)
-	size = Vector2(600, 400)
+	position = Vector2(340, 200)
+	size = Vector2(620, 480)
 	panel = FloatingPanel.new()
 	panel.position = Vector2.ZERO
 	panel.size = size
@@ -48,78 +48,80 @@ func setup(font: Font, on_change: Callable) -> void:
 	close_btn.pressed.connect(func(): visible = false)
 	panel.add_child(close_btn)
 
-	# 获胜方式
-	var y := 8
-	_add_title(panel, "1. 获胜方式", y)
-	y += 30
-	win_btns = _add_radio_row(panel, y, {
+	# 内容放入滚动区(内容较长,超出时可滚动)
+	var scroll := ScrollContainer.new()
+	scroll.position = Vector2(0, 38)
+	scroll.size = Vector2(size.x, size.y - 38)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	panel.add_child(scroll)
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 6)
+	scroll.add_child(content)
+
+	# 获胜方式(无序号)
+	_add_title(content, "获胜方式", 0)
+	win_btns = _add_radio_row(content, {
 		"classic": "经典模式:被吃帅判负,活到最后者胜",
 		"occupy": "占领模式:占据中心棋盘 5 个位置中的 3 个者胜",
-		"kills": "杀棋计数:每杀一王计 1 次,先达 __ 次者胜",
+		"kills": "杀棋计数:每杀一王计 1 次,先达指定次数者胜",
 	}, rules.get("win_mode", "classic"), func(k: String): _set_win(k))
-	y += 110
 
-	# 杀棋次数(仅 kills 模式显示)
-	_add_title(panel, "2. 杀棋次数(杀棋计数模式)", y)
-	y += 30
+	# 杀棋次数(仅 wins 模式显示)
+	_add_title(content, "达成杀棋次数", 0)
 	kill_edit = SpinBox.new()
 	kill_edit.min_value = 1
 	kill_edit.max_value = 9
 	kill_edit.value = rules.get("kill_count", 2)
-	kill_edit.position = Vector2(60, y)
-	kill_edit.size = Vector2(120, 36)
+	kill_edit.custom_minimum_size = Vector2(120, 36)
 	kill_edit.add_theme_font_override("font", font)
 	kill_edit.value_changed.connect(func(_v: float): _save())
-	panel.add_child(kill_edit)
-	y += 56
+	content.add_child(kill_edit)
 
 	# 将帅被杀后
-	_add_title(panel, "3. 将帅被杀后(经典/占领模式)", y)
-	y += 30
-	king_btns = _add_radio_row(panel, y, {
+
+	# 将帅被杀后
+	_add_title(content, "将帅被杀后(经典/占领模式)", 0)
+	king_btns = _add_radio_row(content, {
 		"grey": "该方其他棋子变灰,保留在棋盘",
 		"destroy": "该方所有棋子同时被摧毁",
 		"inherit": "棋子继承给杀棋方",
 	}, rules.get("king_down", "grey"), func(k: String): rules["king_down"] = k; _save())
-	y += 110
 
 	# 升变
-	_add_title(panel, "4. 升变", y)
-	y += 30
-	promo_btns = _add_radio_row(panel, y, {
+	_add_title(content, "升变", 0)
+	promo_btns = _add_radio_row(content, {
 		"queen": "任意兵走到正中心升变为后",
 		"none": "无升变",
 	}, rules.get("promotion", "queen"), func(k: String): rules["promotion"] = k; _save())
-	y += 60
 
 	_save()
 
 
-func _add_title(parent: Node, text: String, y: int) -> void:
+func _add_title(parent: Node, text: String, _y: int) -> void:
 	var l := Label.new()
 	l.text = text
 	l.add_theme_font_override("font", _font_ref)
 	l.add_theme_font_size_override("font_size", 15)
 	l.add_theme_color_override("font_color", Color(0.9, 0.82, 0.65))
-	l.position = Vector2(16, y)
-	l.size = Vector2(560, 26)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	l.custom_minimum_size = Vector2(0, 26)
 	parent.add_child(l)
 
 
-# 一组单选按钮(竖排),返回 key->Button 字典
-func _add_radio_row(parent: Node, y: int, opts: Dictionary, current: String, on_pick: Callable) -> Dictionary:
+# 一组单选按钮(竖排,VBox 自动布局),返回 key->Button 字典
+func _add_radio_row(parent: Node, opts: Dictionary, current: String, on_pick: Callable) -> Dictionary:
 	var btns := {}
-	var yy := y
 	for k in opts:
 		var b := Button.new()
 		b.text = str(opts[k])
 		b.toggle_mode = true
 		b.button_pressed = (k == current)
-		b.position = Vector2(30, yy)
-		b.size = Vector2(540, 30)
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(0, 32)
 		b.add_theme_font_override("font", _font_ref)
 		b.add_theme_font_size_override("font_size", 13)
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		var key: String = String(k)
 		b.pressed.connect(func():
 			_select_only(btns, key)
@@ -127,7 +129,6 @@ func _add_radio_row(parent: Node, y: int, opts: Dictionary, current: String, on_
 		)
 		parent.add_child(b)
 		btns[k] = b
-		yy += 34
 	return btns
 
 
@@ -138,10 +139,13 @@ func _select_only(btns: Dictionary, key: String) -> void:
 
 func _set_win(k: String) -> void:
 	rules["win_mode"] = k
-	# 杀棋次数输入框仅 kills 模式可见
-	if kill_edit != null:
-		kill_edit.visible = (k == "kills")
 	_save()
+	_update_kill_visible()
+
+
+func _update_kill_visible() -> void:
+	if kill_edit != null:
+		kill_edit.visible = (rules.get("win_mode", "classic") == "kills")
 
 
 func load_rules() -> void:
@@ -162,5 +166,6 @@ func _save() -> void:
 	f.store_string(JSON.stringify(rules))
 	f.close()
 	Global.game_rules = rules
+	_update_kill_visible()
 	if _on_change.is_valid():
 		_on_change.call(rules)
