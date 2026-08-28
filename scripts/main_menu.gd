@@ -94,35 +94,35 @@ func _show_net_create() -> void:
 	net_players = 2
 	net_mode_btns = []
 	var mode_title := _label("选择模式", 24, Color(0.9, 0.85, 0.75))
-	mode_title.position = Vector2(0, 150)
+	mode_title.position = Vector2(0, 230)
 	mode_title.size = Vector2(1280, 30)
 	mode_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	opt_root.add_child(mode_title)
-	var skill_btn := _button("技能模式", Vector2(430, 200))
+	var skill_btn := _button("技能模式", Vector2(430, 280))
 	skill_btn.pressed.connect(func(): _set_net_mode("skill"))
 	opt_root.add_child(skill_btn)
 	net_mode_btns.append(skill_btn)
-	var std_btn := _button("标准模式", Vector2(650, 200))
+	var std_btn := _button("标准模式", Vector2(650, 280))
 	std_btn.pressed.connect(func(): _set_net_mode("standard"))
 	opt_root.add_child(std_btn)
 	net_mode_btns.append(std_btn)
 	_refresh_net_mode_highlight()
 	net_players_btns = []
 	var p_title := _label("选择人数", 24, Color(0.9, 0.85, 0.75))
-	p_title.position = Vector2(0, 260)
+	p_title.position = Vector2(0, 340)
 	p_title.size = Vector2(1280, 30)
 	p_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	opt_root.add_child(p_title)
-	var p2_btn := _button("双人", Vector2(430, 310))
+	var p2_btn := _button("双人", Vector2(430, 390))
 	p2_btn.pressed.connect(func(): _set_net_players(2))
 	opt_root.add_child(p2_btn)
 	net_players_btns.append(p2_btn)
-	var p4_btn := _button("四人", Vector2(650, 310))
+	var p4_btn := _button("四人", Vector2(650, 390))
 	p4_btn.pressed.connect(func(): _set_net_players(4))
 	opt_root.add_child(p4_btn)
 	net_players_btns.append(p4_btn)
 	_refresh_net_players_highlight()
-	_add_option_button("创建房间", Vector2(540, 420), func():
+	_add_option_button("创建房间", Vector2(540, 500), func():
 		Global.port = Global.port
 		Global.game_mode = "four" if net_players == 4 else "pvp"
 		Global.standard_mode = net_mode == "standard"
@@ -131,7 +131,7 @@ func _show_net_create() -> void:
 		Global.net_role = "host"
 		get_tree().change_scene_to_file("res://scenes/lobby.tscn")
 	)
-	_add_option_button("返回", Vector2(540, 500), _show_net_options)
+	_add_option_button("返回", Vector2(540, 580), _show_net_options)
 
 
 # 加入在线对战:输入 IP/端口 → 加入房间 → 等候大厅
