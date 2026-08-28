@@ -16,6 +16,7 @@ var collapsed := false
 var _title_bar: Control
 var _font_ref: Font
 var _dragging := false
+var _drag_container: CanvasItem = self
 var _resizing := false
 var _grab := Vector2.ZERO
 var _orig_pos := Vector2.ZERO
@@ -44,6 +45,7 @@ func setup(title: String, font: Font) -> void:
 	_title_bar = Control.new()
 	_title_bar.position = Vector2.ZERO
 	_title_bar.size = Vector2(size.x, TITLE_H)
+	_drag_container = _find_drag_container()
 	# IGNORE:标题栏区域事件直接由面板接收(折叠按钮由 Button 自己处理),确保拖动可靠
 	_title_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_title_bar)
@@ -92,19 +94,26 @@ func _update_layout() -> void:
 	content.size = Vector2(size.x - 20, maxf(0, size.y - TITLE_H - 18))
 
 
+# 找到拖拽时应移动的最外层容器(父链上最外层 Panel;若父是 CanvasLayer/根则移动自己)
+func _find_drag_container() -> CanvasItem:
+	var node: CanvasItem = self
+	while node.get_parent() != null and node.get_parent() is Panel:
+		node = node.get_parent()
+	return node
+
+
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		# 点击时置顶:移到父节点末尾,避免被其他悬浮窗遮住
-		if event.pressed and get_parent() != null:
-			var parent := get_parent()
-			parent.remove_child(self)
-			parent.add_child(self)
+		# 点击时置顶:提高 z_index(不移动节点,避免打断拖拽事件流)
+		if event.pressed:
+			_raise_top()
 		var lp: Vector2 = event.position
 		if event.pressed:
+			_drag_container = _find_drag_container()
 			_dragging = lp.y <= TITLE_H and not _point_in(lp, collapse_btn.get_rect())
 			_resizing = lp.x >= size.x - HANDLE and lp.y >= size.y - HANDLE
 			_grab = lp
-			_orig_pos = position
+			_orig_pos = _drag_container.position
 			# 折叠状态下按下不更新展开尺寸(避免污染)
 			if not collapsed:
 				_expanded_size = size
@@ -117,9 +126,9 @@ func _gui_input(event: InputEvent) -> void:
 		if _dragging:
 			var p: Vector2 = _orig_pos + delta
 			var vp: Vector2 = get_viewport_rect().size
-			p.x = clampf(p.x, 0, maxf(0, vp.x - size.x))
-			p.y = clampf(p.y, 0, maxf(0, vp.y - size.y))
-			position = p
+			p.x = clampf(p.x, 0, maxf(0, vp.x - _drag_container.size.x))
+			p.y = clampf(p.y, 0, maxf(0, vp.y - _drag_container.size.y))
+			_drag_container.position = p
 		if _resizing:
 			var s: Vector2 = _expanded_size + delta
 			s.x = maxf(s.x, 160)
@@ -128,6 +137,22 @@ func _gui_input(event: InputEvent) -> void:
 			_expanded_size = s
 			_update_layout()
 		accept_event()
+
+
+# 点击置顶:把整个悬浮窗容器(最外层 Panel)提到同父级最上,不修改节点树
+func _raise_top() -> void:
+	# 找到最外层容器(父不是 Panel 的 Panel)
+	var container: CanvasItem = self
+	while container.get_parent() != null and container.get_parent() is Panel:
+		container = container.get_parent()
+	var parent = container.get_parent()
+	if parent == null:
+		return
+	var max_z := 0
+	for child in parent.get_children():
+		if child is CanvasItem:
+			max_z = maxi(max_z, (child as CanvasItem).z_index)
+	container.z_index = max_z + 1
 
 
 func _point_in(p: Vector2, rect: Rect2) -> bool:
