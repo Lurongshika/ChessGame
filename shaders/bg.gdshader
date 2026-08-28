@@ -6,10 +6,10 @@ uniform float time_scale : hint_range(0.0, 3.0) = 0.9;
 uniform float warp_strength : hint_range(0.0, 2.5) = 1.2;
 uniform float grain_amount : hint_range(0.0, 0.1) = 0.022;
 
-// 深墨蓝底 / 柔和蓝光 / 高光点缀
-uniform vec4 bg_color : source_color = vec4(0.025, 0.045, 0.075, 1.0);
-uniform vec4 glow_color : source_color = vec4(0.08, 0.15, 0.24, 1.0);
-uniform vec4 accent_color : source_color = vec4(0.13, 0.28, 0.42, 1.0);
+// 深墨蓝底 / 柔和蓝光 / 高光点缀(对比加大,光晕更明显)
+uniform vec4 bg_color : source_color = vec4(0.012, 0.022, 0.04, 1.0);
+uniform vec4 glow_color : source_color = vec4(0.16, 0.3, 0.46, 1.0);
+uniform vec4 accent_color : source_color = vec4(0.24, 0.48, 0.68, 1.0);
 
 float hash(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -54,7 +54,7 @@ void fragment() {
 
 	// 深色底 + 柔和光晕 + 高光丝带
 	vec3 col = mix(bg_color.rgb, glow_color.rgb, smoothstep(0.25, 0.85, f));
-	col += accent_color.rgb * pow(f, 3.0) * 0.35;
+	col += accent_color.rgb * pow(f, 3.0) * 0.5;
 
 	// 微颗粒质感
 	float grain = hash(uv * 900.0 + floor(TIME * 24.0));

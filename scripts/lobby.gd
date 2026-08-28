@@ -27,6 +27,17 @@ func _font() -> Font:
 
 
 func _ready() -> void:
+	# 确保自定义规则已加载(默认值;面板打开时会覆盖保存值)
+	if Global.game_rules.is_empty():
+		var rules_path := "user://rules.json"
+		if FileAccess.file_exists(rules_path):
+			var rf := FileAccess.open(rules_path, FileAccess.READ)
+			if rf != null:
+				var rdata: Variant = JSON.parse_string(rf.get_as_text())
+				if rdata is Dictionary:
+					Global.game_rules = rdata
+		if Global.game_rules.is_empty():
+			Global.game_rules = {"win_mode": "classic", "kill_count": 2, "king_down": "grey", "promotion": "queen"}
 	var bg := ColorRect.new()
 	bg.color = Color(0.09, 0.08, 0.07)
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -538,17 +549,20 @@ func _start_game() -> void:
 				"is_ai": true,
 			}
 	Global.from_lobby = true
-	start_game.rpc(Global.player_colors, Global.game_mode, Global.standard_mode, lobby_players)
+	start_game.rpc(Global.player_colors, Global.game_mode, Global.standard_mode, lobby_players, Global.game_rules)
 
 
 @rpc("authority", "call_local", "reliable")
-func start_game(colors: Dictionary, mode: String, standard: bool, lobby_players: Dictionary = {}) -> void:
+func start_game(colors: Dictionary, mode: String, standard: bool, lobby_players: Dictionary = {}, game_rules: Dictionary = {}) -> void:
 	Global.from_lobby = true
 	Global.player_colors = colors
 	# 加入方必须同步房间模式(四人/标准),否则会按双人 pvp 逻辑等待 assign_perks 卡死
 	Global.game_mode = mode
 	Global.standard_mode = standard
 	Global.lobby_players = lobby_players
+	# 同步自定义规则(占领点/击杀目标等),加入端与主机一致
+	if not game_rules.is_empty():
+		Global.game_rules = game_rules
 	# 保持连接,直接进入对局(game 复用大厅连接)
 	get_tree().change_scene_to_file("res://scenes/game.tscn")
 
