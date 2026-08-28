@@ -41,7 +41,8 @@ func setup(font: Font, on_change: Callable) -> void:
 	# 右上角 X 关闭按钮
 	var close_btn := Button.new()
 	close_btn.text = "✕"
-	close_btn.position = Vector2(size.x - 40, 4)
+	# 放在折叠按钮(右侧)左侧,避免重叠
+	close_btn.position = Vector2(size.x - 44 - 40, 4)
 	close_btn.size = Vector2(34, 28)
 	close_btn.add_theme_font_override("font", font)
 	close_btn.add_theme_font_size_override("font_size", 16)
@@ -50,8 +51,8 @@ func setup(font: Font, on_change: Callable) -> void:
 
 	# 内容放入滚动区(内容较长,超出时可滚动)
 	var scroll := ScrollContainer.new()
-	scroll.position = Vector2(0, 38)
-	scroll.size = Vector2(size.x, size.y - 38)
+	scroll.position = Vector2(20, 38)
+	scroll.size = Vector2(size.x - 20, size.y - 38)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	panel.add_child(scroll)
 	var content := VBoxContainer.new()
