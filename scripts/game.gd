@@ -637,9 +637,19 @@ func _activate_skill4(perk_id: String, side: int) -> void:
 
 
 # 四人:记录技能使用(显示到对局记录)
+# 对局记录用:简单方名(黑方/红方/绿方/蓝方,无上下左右)
+func _side_short4(side: int) -> String:
+	match side:
+		1: return "黑方"
+		0: return "红方"
+		2: return "绿方"
+		3: return "蓝方"
+	return "方"
+
+
 func _record_skill4(side: int, perk_id: String) -> void:
 	var nm: String = perks_data[perk_id]["name"] if perks_data.has(perk_id) else perk_id
-	_record4_history.append({"text": "%s 使用[%s]" % [SIDE_NAMES4[side], nm], "turn": turn4})
+	_record4_history.append({"text": "%s 使用[%s]" % [_side_short4(side), nm], "turn": turn4})
 	_refresh_record4()
 
 
@@ -4514,7 +4524,7 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 		_show_status4("%s 兵晋升为后!" % SIDE_NAMES4[side])
 	# 四人:记录走子
 	var piece_name: String = R.PIECE_NAMES[mover["type"]] if (side == 0 or side == 2) else R.PIECE_NAMES_BLACK[mover["type"]]
-	_record4_history.append({"text": "%s %s %d%d→%d%d" % [SIDE_NAMES4[side], piece_name, from.x, from.y, to.x, to.y], "turn": turn4})
+	_record4_history.append({"text": "%s %s %d%d→%d%d" % [_side_short4(side), piece_name, from.x, from.y, to.x, to.y], "turn": turn4})
 	_refresh_record4()
 	if captured != null:
 		hidden_pieces4.erase(to)
