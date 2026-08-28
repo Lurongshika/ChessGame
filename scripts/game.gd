@@ -497,17 +497,12 @@ func _build_ui4() -> void:
 		if tex != null:
 			icon.texture = tex
 		frame.add_child(icon)
-		var nm := _make_label(nm_text, 14, Color(0.9, 0.9, 0.85))
-		nm.position = pos + Vector2(0, 58)
-		nm.size = Vector2(240, 20)
-		nm.add_theme_font_size_override("font_size", 13)
-		nm.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		corner_layer.add_child(nm)
-		# id 标注(取代上下左右)
-		var idlab := _make_label("ID %d" % id_order[side], 11, Color(0.6, 0.58, 0.54))
-		idlab.position = pos + Vector2(54, 6)
-		idlab.size = Vector2(44, 16)
+		# 玩家名称标注(取代上下左右小字;头像下方不再重复显示)
+		var idlab := _make_label(nm_text, 12, Color(0.9, 0.9, 0.85))
+		idlab.position = pos + Vector2(54, 5)
+		idlab.size = Vector2(190, 18)
+		idlab.add_theme_font_size_override("font_size", 12)
+		idlab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		corner_layer.add_child(idlab)
 		_four_frames.append({"frame": frame, "side": side})
 	# 按半场位置:上(黑)左上、下(红)左下、左(绿)右上、右(蓝)右下
