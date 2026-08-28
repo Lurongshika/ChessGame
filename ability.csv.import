@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://iqev2k87ajh4"
+
+[deps]
+
+files=["res://ability.desc.translation", "res://ability.cd.translation", "res://ability.充能方式.translation", "res://ability.触发模式.translation"]
+
+source_file="res://ability.csv"
+dest_files=["res://ability.desc.translation", "res://ability.cd.translation", "res://ability.充能方式.translation", "res://ability.触发模式.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true
