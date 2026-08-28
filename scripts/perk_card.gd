@@ -6,6 +6,7 @@ signal clicked(perk_id: String, side: int)
 var perk_id := ""
 var _side := -1
 var selected := false
+var bg_tint := Color(-1, -1, -1)  # 自定义背景色(-1 表示用默认)
 
 
 func setup(id: String, side_id: int, title: String, tip: String, desc: String, font: Font, is_self: bool, card_w: float) -> void:
@@ -86,7 +87,11 @@ func _refresh_style(is_self: bool, card_w: float) -> void:
 		bg.border_color = Color(1.0, 0.85, 0.3)
 		bg.set_border_width_all(3)
 	else:
-		if is_self:
+		if bg_tint.r >= 0.0:
+			# 自定义背景色(四人模式玩家色)
+			bg.bg_color = Color(bg_tint.r * 0.55 + 0.15, bg_tint.g * 0.55 + 0.12, bg_tint.b * 0.55 + 0.12, 0.95)
+			bg.border_color = bg_tint
+		elif is_self:
 			bg.bg_color = Color(0.18, 0.28, 0.4, 0.95)
 			bg.border_color = Color(0.55, 0.68, 0.85)
 		else:

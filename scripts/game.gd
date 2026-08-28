@@ -561,6 +561,9 @@ func _refresh_perk_panels4() -> void:
 				tip += " (充能 %d/3)" % siwang_charge4[side]
 			var card := PerkCard.new()
 			card.setup(id, side, info["name"], tip, info["desc"], _font(), true, 200.0)
+			# 四人:技能卡背景用该方玩家颜色
+			card.bg_tint = _side_color(side)
+			card._refresh_style(true, 200.0)
 			card.clicked.connect(_on_perk_clicked4)
 			box.add_child(card)
 
