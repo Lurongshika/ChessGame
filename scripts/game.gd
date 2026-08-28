@@ -106,6 +106,10 @@ var four_draft_picks := {0: [], 1: [], 2: [], 3: []}  # 联机四人:每方选�
 var four_side_to_peer := {}   # 联机四人:side -> peer_id(host 用)
 var _four_draft_started := false
 var _four_ready_done := {}    # 联机四人:已发 client_ready 的 pid
+var _reconnecting := false    # 断线重连中
+var _four_side_absent := {}  # 四人主机:断线待重连的 side -> true
+var _reconnect_timer := 0.0
+var _reconnect_interval := 2.0
 
 # --- 网络 ---
 
@@ -1069,6 +1073,25 @@ func client_ready4() -> void:
 	if not multiplayer.is_server():
 		return
 	var pid := multiplayer.get_remote_sender_id()
+	# 对局已开始:客户端重连,重发完整状态并关联席位
+	if _four_draft_started and phase == Phase.PLAY:
+		_four_ready_done[pid] = true
+		# 把重连 pid 关联到空缺席位(若无空缺则匹配原 pid)
+		var assigned := false
+		for side in _four_side_absent:
+			if _four_side_absent[side]:
+				four_side_to_peer[side] = pid
+				_four_side_absent[side] = false
+				assigned = true
+				print("NET4: client RECONNECT pid=", pid, " -> side ", side)
+				break
+		if not assigned:
+			for side in four_side_to_peer:
+				if int(Global.lobby_players.get(side, {}).get("pid", -1)) == pid:
+					print("NET4: client RECONNECT same pid=", pid, " side=", side)
+					break
+		sync_state4.rpc_id(pid, _state_to_data4())
+		return
 	if _four_ready_done.has(pid):
 		return
 	_four_ready_done[pid] = true
@@ -1357,6 +1380,22 @@ func _setup_host() -> void:
 	print("NET: host ready on port ", Global.port)
 
 
+# 断线重连:重新建立连接
+func _try_reconnect() -> void:
+	if multiplayer.multiplayer_peer != null:
+		return
+	print("NET: retrying connection to ", Global.server_ip, ":", Global.port)
+	var peer := ENetMultiplayerPeer.new()
+	var err := peer.create_client(Global.server_ip, Global.port)
+	if err != OK:
+		status_label.text = "重连失败,将再次尝试..."
+		return
+	multiplayer.multiplayer_peer = peer
+	multiplayer.connected_to_server.connect(_on_connected_to_server)
+	multiplayer.connection_failed.connect(_on_connection_failed)
+	multiplayer.server_disconnected.connect(_on_peer_disconnected)
+
+
 func _setup_client() -> void:
 	print("NET: creating client peer...")
 	# 清理上次联机的 peer(回菜单再加入时旧连接不会残留)
@@ -1378,6 +1417,14 @@ func _setup_client() -> void:
 
 func _on_connected_to_server() -> void:
 	print("NET: client connected to server, waiting for perks")
+	if _reconnecting:
+		_reconnecting = false
+		# 重连成功:重新握手(四人)或等待主机重发状态
+		if four_mode:
+			client_ready4.rpc_id(1)
+			send_profile.rpc_id(1, Profile.to_net_data())
+			status_label.text = "已重连,等待同步..."
+		return
 	# 把自己的用户资料发给主机
 	send_profile.rpc_id(1, Profile.to_net_data())
 	# 技能模式:等待主机(红方)先选完技能
@@ -1422,8 +1469,21 @@ func _on_peer_connected(peer_id: int) -> void:
 		call_deferred("_auto_pick_host")
 
 
-func _on_peer_disconnected(_id: int) -> void:
-	print("NET: peer disconnected")
+func _on_peer_disconnected(id: int) -> void:
+	print("NET: peer disconnected pid=", id)
+	# 四人联机客户端断线:自动重连
+	if four_mode and net_role == "client" and phase == Phase.PLAY and winner4 < 0:
+		_reconnecting = true
+		_reconnect_timer = 0.0
+		status_label.text = "连接断开,正在重连..."
+		return
+	# 四人主机:标记断线席位(保留,等待重连;不判负)
+	if four_mode and net_role == "host" and phase == Phase.PLAY:
+		for side in four_side_to_peer:
+			if four_side_to_peer[side] == id:
+				_four_side_absent[side] = true
+				_show_status4("%s 掉线,等待重连..." % SIDE_NAMES4[side])
+				return
 	status_label.text = "对方已断开连接"
 	if phase != Phase.OVER:
 		phase = Phase.OVER
@@ -3077,6 +3137,12 @@ func _process(delta: float) -> void:
 	# 轮到走子:头像框高亮发光(正弦脉动)
 	_glow_time += delta
 	_update_badge_glow()
+	# 断线重连:定时尝试
+	if _reconnecting:
+		_reconnect_timer += delta
+		if _reconnect_timer >= _reconnect_interval:
+			_reconnect_timer = 0.0
+			_try_reconnect()
 	# 四人:技能提示显示 1 秒后恢复回合显示
 	if four_mode and status_label != null and _status4_until > 0.0:
 		if Time.get_ticks_msec() / 1000.0 >= _status4_until:

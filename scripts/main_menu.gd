@@ -30,21 +30,12 @@ func _ready() -> void:
 	add_child(btn3)
 	menu_btns.append(btn3)
 
-	var btn45 := _button("4人象棋", Vector2(540, 450))
-	btn45.pressed.connect(func():
-		Global.game_mode = "four"
-		Global.net_role = "local"
-		get_tree().change_scene_to_file("res://scenes/game.tscn")
-	)
-	add_child(btn45)
-	menu_btns.append(btn45)
-
-	var btn4 := _button("技能图鉴", Vector2(540, 520))
+	var btn4 := _button("技能图鉴", Vector2(540, 450))
 	btn4.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/manual.tscn"))
 	add_child(btn4)
 	menu_btns.append(btn4)
 
-	var btn5 := _button("退出游戏", Vector2(540, 590))
+	var btn5 := _button("退出游戏", Vector2(540, 520))
 	btn5.pressed.connect(func(): get_tree().quit())
 	add_child(btn5)
 	menu_btns.append(btn5)
