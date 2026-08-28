@@ -373,6 +373,14 @@ func net_avatar(data: Dictionary, size: int) -> Texture2D:
 	return Profile.color_icon(Color(float(c[0]), float(c[1]), float(c[2])), size)
 
 
+# COLORS16 索引 → 颜色名(红/蓝/绿/紫/粉/青/黑/橙)
+func _color_name(idx: int) -> String:
+	var names := ["红", "蓝", "绿", "紫", "粉", "青", "黑", "橙"]
+	if idx >= 0 and idx < names.size():
+		return names[idx]
+	return "色 %d" % (idx + 1)
+
+
 func _update_ui() -> void:
 	if players_box == null:
 		return
@@ -440,7 +448,7 @@ func _player_row(pid: int, p: Dictionary) -> Control:
 	# 当前颜色块 + 是否自己 + 准备状态
 	var color_txt := "未选色"
 	if color_idx >= 0:
-		color_txt = "颜色 %d" % (color_idx + 1)
+		color_txt = _color_name(color_idx)
 	var suffix := " (我)" if pid == my_peer else ""
 	var ready_txt := "已准备" if bool(p.get("ready", false)) else "未准备"
 	var info := _make_label("%s%s  [%s]" % [color_txt, suffix, ready_txt], 16, Color(0.8, 0.75, 0.65))

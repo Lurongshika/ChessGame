@@ -118,7 +118,8 @@ func _add_radio_row(parent: Node, opts: Dictionary, current: String, on_pick: Ca
 		b.toggle_mode = true
 		b.button_pressed = (k == current)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# 自动宽度(按文字),不撑满面板;文字太长自动换行到两行
+		b.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		b.custom_minimum_size = Vector2(0, 32)
 		b.add_theme_font_override("font", _font_ref)
 		b.add_theme_font_size_override("font_size", 13)
