@@ -91,7 +91,7 @@ func _show_net_create() -> void:
 		opt_root.queue_free()
 	opt_root = _make_option_layer()
 	net_mode = "skill"
-	net_players = 2
+	net_players = 4
 	net_mode_btns = []
 	var mode_title := _label("选择模式", 24, Color(0.9, 0.85, 0.75))
 	mode_title.position = Vector2(0, 230)

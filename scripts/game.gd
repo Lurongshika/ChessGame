@@ -4287,6 +4287,10 @@ func _draw_pieces4() -> void:
 
 
 func _draw_overlay4() -> void:
+	# 占领模式:中心 5 点用黑点标记
+	if Global.game_rules.get("win_mode", "classic") == "occupy":
+		for spot in _occupy_spots4():
+			draw_circle(_pos_px4(spot), 5.0, Color(0, 0, 0, 0.85))
 	# 复制双人落位显示:选中黄圈 / 落位绿点(空位)红圈(吃子)
 	if selected4.x >= 0:
 		draw_arc(_pos_px4(selected4), 16.0, 0, TAU, 24, Color(0.95, 0.8, 0.2), 2.5)
@@ -4584,8 +4588,13 @@ func _grey_keep_pieces4(dead: int) -> void:
 
 
 # 占领模式:检查是否有人占据中心 5 点中 3 个
+# 占领模式 5 个中心点:中心 + 四条对角线(黑点标记)
+func _occupy_spots4() -> Array:
+	return [Vector2i(8, 8), Vector2i(6, 6), Vector2i(10, 10), Vector2i(6, 10), Vector2i(10, 6)]
+
+
 func _occupy_winner4() -> int:
-	var center_spots := [Vector2i(8, 8), Vector2i(7, 8), Vector2i(9, 8), Vector2i(8, 7), Vector2i(8, 9)]
+	var center_spots := _occupy_spots4()
 	var counts := {0: 0, 1: 0, 2: 0, 3: 0}
 	for spot in center_spots:
 		var p = board[spot.y][spot.x]

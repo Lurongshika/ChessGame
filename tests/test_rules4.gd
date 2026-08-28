@@ -92,10 +92,14 @@ func _run() -> void:
 	for r in 17:
 		for c in 17:
 			game.board[r][c] = null
-	var spots := [Vector2i(8, 8), Vector2i(7, 8), Vector2i(9, 8)]
+	var spots := [Vector2i(8, 8), Vector2i(6, 6), Vector2i(10, 10)]
 	for sp in spots:
 		game.board[sp.y][sp.x] = R.make_piece(0, R.Type.PAWN)
 	_check(game._occupy_winner4() == 0, "红方占 3 中心点获胜")
+	# 5 个占据点验证
+	var spots5: Array = game._occupy_spots4()
+	_check(spots5.size() == 5, "5 个占据点")
+	_check(Vector2i(6, 6) in spots5 and Vector2i(10, 10) in spots5, "对角点存在")
 	quit(0 if _failures == 0 else 1)
 
 
