@@ -118,9 +118,18 @@ func _add_radio_row(parent: Node, opts: Dictionary, current: String, on_pick: Ca
 		b.toggle_mode = true
 		b.button_pressed = (k == current)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		# 自动宽度(按文字),不撑满面板;文字太长自动换行到两行
+		# 透明背景(去掉黑底),选中时金色文字高亮
+		b.add_theme_stylebox_override("normal", _transparent_style(false))
+		b.add_theme_stylebox_override("hover", _transparent_style(false))
+		b.add_theme_stylebox_override("pressed", _transparent_style(true))
+		b.add_theme_stylebox_override("focus", _transparent_style(false))
+		b.add_theme_stylebox_override("hover_pressed", _transparent_style(true))
+		b.add_theme_color_override("font_color", Color(0.85, 0.82, 0.78))
+		b.add_theme_color_override("font_pressed_color", Color(1.0, 0.85, 0.3))
+		b.add_theme_color_override("font_hover_color", Color(0.95, 0.9, 0.85))
+		# 自动宽度(按文字),不撑满面板
 		b.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-		b.custom_minimum_size = Vector2(0, 32)
+		b.custom_minimum_size = Vector2(0, 30)
 		b.add_theme_font_override("font", _font_ref)
 		b.add_theme_font_size_override("font_size", 13)
 		var key: String = String(k)
@@ -131,6 +140,21 @@ func _add_radio_row(parent: Node, opts: Dictionary, current: String, on_pick: Ca
 		parent.add_child(b)
 		btns[k] = b
 	return btns
+
+
+# 透明背景样式(选中时左侧金色圆点标识)
+func _transparent_style(selected: bool) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0, 0, 0, 0)
+	sb.set_corner_radius_all(4)
+	sb.content_margin_left = 20  # 文字右移(避开选中圆点)
+	sb.content_margin_right = 6
+	sb.content_margin_top = 2
+	sb.content_margin_bottom = 2
+	if selected:
+		sb.border_color = Color(1.0, 0.85, 0.3)
+		sb.set_border_width_all(1)
+	return sb
 
 
 func _select_only(btns: Dictionary, key: String) -> void:
