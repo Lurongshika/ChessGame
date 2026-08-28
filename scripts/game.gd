@@ -176,6 +176,8 @@ var enemy_badge_frame: Panel
 var _glow_time := 0.0
 var _status4_until := 0.0   # 四人:状态提示显示到此刻(秒),之后恢复回合显示
 var _four_frames: Array = []  # 四人:四方头像框 {frame, side}
+var _four_mode_label: Label  # 左上角当前模式
+var _progress_labels4 := {}  # 右上角进度: side -> Label
 var my_info := {}
 var enemy_info := {}
 
@@ -395,19 +397,90 @@ func _toggle_record() -> void:
 		record_panel.visible = record_visible
 
 
+# 当前模式名(左上角)
+func _mode_name4() -> String:
+	if Global.standard_mode:
+		return "标准模式"
+	var win_mode: String = Global.game_rules.get("win_mode", "classic")
+	match win_mode:
+		"occupy":
+			return "占领模式"
+		"kills":
+			return "击杀模式(目标 %d)" % int(Global.game_rules.get("kill_count", 2))
+	return "技能模式"
+
+
+# 右上角 2×2 胜利进度面板
+func _build_progress_panel4() -> void:
+	var panel := Panel.new()
+	panel.position = Vector2(1280 - 300, 8)
+	panel.size = Vector2(284, 96)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.1, 0.12, 0.16, 0.7)
+	sb.set_corner_radius_all(8)
+	sb.border_color = Color(0.45, 0.4, 0.32)
+	sb.set_border_width_all(1)
+	panel.add_theme_stylebox_override("panel", sb)
+	ui.add_child(panel)
+	# 2×2:上排 黑(1)蓝(3),下排 红(0)绿(2)
+	var cells := {1: Vector2(8, 8), 3: Vector2(148, 8), 0: Vector2(8, 52), 2: Vector2(148, 52)}
+	for side in cells:
+		var pos: Vector2 = cells[side]
+		var color_dot := ColorRect.new()
+		color_dot.color = _side_color(side)
+		color_dot.position = pos
+		color_dot.size = Vector2(14, 14)
+		panel.add_child(color_dot)
+		var l := _make_label("", 12, Color(0.9, 0.9, 0.85))
+		l.position = pos + Vector2(20, 0)
+		l.size = Vector2(120, 16)
+		panel.add_child(l)
+		_progress_labels4[side] = l
+	_update_progress4()
+
+
+# 刷新四方胜利进度
+func _update_progress4() -> void:
+	if _progress_labels4.is_empty():
+		return
+	# 同步左上角模式名
+	if _four_mode_label != null:
+		_four_mode_label.text = _mode_name4()
+	var win_mode: String = Global.game_rules.get("win_mode", "classic")
+	for side in _progress_labels4:
+		var l: Label = _progress_labels4[side]
+		if win_mode == "occupy":
+			var n := 0
+			if not board.is_empty():
+				for spot in _occupy_spots4():
+					var p = board[spot.y][spot.x]
+					if p != null and p["side"] == side:
+						n += 1
+			l.text = "占点 %d/3" % n
+		elif win_mode == "kills":
+			var target := int(Global.game_rules.get("kill_count", 2))
+			l.text = "击杀 %d/%d" % [kill_count4[side], target]
+		else:
+			l.text = "存活"
+
+
 func _build_ui4() -> void:
 	# 四人模式:不构建对局记录/玩家徽章/双人技能面板,改为四悬浮窗(四方技能)
-	var title := _make_label("4人象棋", 26, Color(0.95, 0.85, 0.6))
-	title.position = Vector2(20, 12)
-	title.size = Vector2(300, 36)
-	ui.add_child(title)
+	# 左上角:当前模式名
+	_four_mode_label = _make_label(_mode_name4(), 26, Color(0.95, 0.85, 0.6))
+	_four_mode_label.position = Vector2(16, 6)
+	_four_mode_label.size = Vector2(340, 36)
+	ui.add_child(_four_mode_label)
+	# 右上角:胜利进度面板(2×2 四方)
+	_build_progress_panel4()
 	_four_perk_boxes = []
-	# 四角:四位玩家头像+名字(轮到走子发光);放独立高层 CanvasLayer,不被 DRAFT/结算遮挡
+	# 四角:四位玩家头像+名字+id(轮到走子发光);放独立高层 CanvasLayer,不被 DRAFT/结算遮挡
 	var corner_layer := CanvasLayer.new()
 	corner_layer.layer = 5
 	add_child(corner_layer)
 	_four_frames = []
-	var corners := {1: Vector2(24, 16), 3: Vector2(1280 - 24 - 240, 16), 0: Vector2(24, 720 - 16 - 66), 2: Vector2(1280 - 24 - 240, 720 - 16 - 66)}
+	var corners := {1: Vector2(24, 60), 3: Vector2(1280 - 24 - 240, 60), 0: Vector2(24, 720 - 16 - 66), 2: Vector2(1280 - 24 - 240, 720 - 16 - 66)}
+	var id_order := {1: 1, 0: 2, 2: 3, 3: 4}  # 四方 id(黑1 红2 绿3 蓝4)
 	for side in [1, 0, 2, 3]:
 		var pos: Vector2 = corners[side]
 		var info: Dictionary = Global.lobby_players.get(side, {})
@@ -431,12 +504,11 @@ func _build_ui4() -> void:
 		nm.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		corner_layer.add_child(nm)
-		# 半场方位标注(黑=上 蓝=右 红=下 绿=左)
-		var dir_text := "上" if side == 1 else ("右" if side == 3 else ("下" if side == 0 else "左"))
-		var dlab := _make_label(dir_text, 11, Color(0.6, 0.58, 0.54))
-		dlab.position = pos + Vector2(54, 6)
-		dlab.size = Vector2(24, 16)
-		corner_layer.add_child(dlab)
+		# id 标注(取代上下左右)
+		var idlab := _make_label("ID %d" % id_order[side], 11, Color(0.6, 0.58, 0.54))
+		idlab.position = pos + Vector2(54, 6)
+		idlab.size = Vector2(44, 16)
+		corner_layer.add_child(idlab)
 		_four_frames.append({"frame": frame, "side": side})
 	# 按半场位置:上(黑)左上、下(红)左下、左(绿)右上、右(蓝)右下
 	var positions := {1: Vector2(20, 90), 0: Vector2(20, 430), 2: Vector2(1030, 90), 3: Vector2(1030, 430)}
@@ -4460,6 +4532,7 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 		_update_status4()
 	_refresh_pope_guard4(side)
 	_refresh_pope_guard4(_next_alive4(side))
+	_update_progress4()
 	# 占领模式:走子后检查中心占领
 	if Global.game_rules.get("win_mode", "classic") == "occupy":
 		var occ := _occupy_winner4()
@@ -4478,6 +4551,7 @@ func _handle_king_captured4(dead: int, killer: int) -> String:
 	if win_mode == "kills":
 		# 杀棋计数:杀棋次数 +1,被杀方半场恢复开局状态(半场内敌方棋子全摧毁)
 		kill_count4[dead] += 1
+		_update_progress4()
 		_show_status4("%s 被杀棋(%d/%d)!" % [SIDE_NAMES4[dead], kill_count4[dead], kill_count])
 		_restore_arm4(dead)
 		if kill_count4[dead] >= kill_count:
