@@ -1547,8 +1547,210 @@ func client_ready() -> void:
 	_on_peer_connected(pid)
 
 
+# ==================== 聊天指令系统 ====================
+# 通过聊天框输入指令(联机对局内可用,host 权威执行):
+#   /place x y 类型   放置棋子(类型:帅将仕士相象马车炮兵卒后 或 k/a/e/h/r/c/p)
+#   /place x y null   摧毁该位置棋子
+#   /skill 方 id on|off   添加/移除技能(id 见技能池;方:红/黑/绿/蓝 或 0-3)
+#   /charge 方 id 值  设置技能充能(皇后/死亡充能、星星蓄势等)
+#   /state 方 无敌|反制  该方所有棋子无敌/反制
+#   /state x y 隐身|显形  指定位置棋子隐身/显形
+func _try_exec_command(text: String) -> bool:
+	var t := text.strip_edges()
+	if not t.begins_with("/"):
+		return false
+	var parts := t.split(" ", false)
+	if parts.is_empty():
+		return true
+	var cmd := String(parts[0]).to_lower()
+	match cmd:
+		"/place":
+			if parts.size() < 3:
+				_show_command_result("用法: /place x y 类型|null")
+				return true
+			var x := int(parts[1])
+			var y := int(parts[2])
+			if not R.in_board(Vector2i(x, y)):
+				_show_command_result("坐标越界")
+				return true
+			if parts.size() >= 4 and parts[3].to_lower() == "null":
+				board[y][x] = null
+				_show_command_result("已摧毁 (%d,%d)" % [x, y])
+			else:
+				var ptype := _piece_type_from_name(parts[3])
+				if ptype < 0:
+					_show_command_result("未知棋子类型: %s" % parts[3])
+					return true
+				board[y][x] = R.make_piece(current_side4() if four_mode else turn, ptype)
+				_show_command_result("已在 (%d,%d) 放置 %s" % [x, y, R.PIECE_NAMES.get(ptype, str(ptype))])
+			queue_redraw()
+			_broadcast_state() if net_role == "host" else null
+			return true
+		"/skill":
+			if parts.size() < 4:
+				_show_command_result("用法: /skill 方 id on|off")
+				return true
+			var side := _side_from_name(parts[1])
+			if side < 0:
+				_show_command_result("未知方: %s" % parts[1])
+				return true
+			var id := parts[2]
+			var onoff := parts[3].to_lower()
+			if four_mode:
+				if onoff == "on" or onoff == "true" or onoff == "1":
+					perks4[side][id] = true
+				else:
+					perks4[side].erase(id)
+				_show_command_result("已%s %s 的技能 %s" % ["添加" if onoff == "on" or onoff == "true" or onoff == "1" else "移除", _side_name(side), id])
+			else:
+				if onoff == "on" or onoff == "true" or onoff == "1":
+					perks_of(side)[id] = true
+				else:
+					perks_of(side).erase(id)
+				_show_command_result("已%s %s 的技能 %s" % ["添加" if onoff == "on" or onoff == "true" or onoff == "1" else "移除", _side_name(side), id])
+			_refresh_perk_panels() if not four_mode else _refresh_perk_panels4()
+			queue_redraw()
+			_broadcast_state() if net_role == "host" else null
+			return true
+		"/charge":
+			if parts.size() < 4:
+				_show_command_result("用法: /charge 方 id 值")
+				return true
+			var side := _side_from_name(parts[1])
+			if side < 0:
+				_show_command_result("未知方: %s" % parts[1])
+				return true
+			var id := parts[2]
+			var val := int(parts[3])
+			if four_mode:
+				match id:
+					"huanghou", "huanghou2":
+						queen_charge4[side] = val
+					"siwang", "siwang2":
+						siwang_charge4[side] = val
+					"xingxing2":
+						star2_charge4[side] = val
+					_:
+						_show_command_result("未知充能技能: %s" % id)
+						return true
+			else:
+				match id:
+					"huanghou", "huanghou2":
+						queen_charge[side] = val
+					"siwang", "siwang2":
+						siwang_charge[side] = val
+					"xingxing2":
+						star2_charge[side] = val
+					_:
+						_show_command_result("未知充能技能: %s" % id)
+						return true
+			_show_command_result("%s 的 %s 充能设为 %d" % [_side_name(side), id, val])
+			_refresh_perk_panels() if not four_mode else _refresh_perk_panels4()
+			queue_redraw()
+			_broadcast_state() if net_role == "host" else null
+			return true
+		"/state":
+			if parts.size() < 3:
+				_show_command_result("用法: /state 方 无敌|反制  或  /state x y 隐身|显形")
+				return true
+			# 坐标形式 /state x y 隐身|显形:parts[1] 是数字且棋盘内
+			var is_xy: bool = parts.size() >= 4 and parts[1].is_valid_int() and parts[2].is_valid_int() \
+				and R.in_board(Vector2i(int(parts[1]), int(parts[2])))
+			var s := -1 if is_xy else _side_from_name(parts[1])
+			if s >= 0:
+				var st := parts[2].to_lower()
+				if st == "无敌" or st == "invincible":
+					if four_mode:
+						invincible_side4 = s
+					else:
+						invincible_side = s
+					_show_command_result("%s 所有棋子无敌" % _side_name(s))
+				elif st == "反制" or st == "counter":
+					if four_mode:
+						counter_side4 = s
+					else:
+						counter_side = s
+					_show_command_result("%s 所有棋子反制" % _side_name(s))
+				else:
+					_show_command_result("未知状态: %s (可用: 无敌/反制)" % parts[2])
+					return true
+			else:
+				# /state x y 隐身|显形
+				if parts.size() < 4:
+					_show_command_result("用法: /state 方 无敌|反制  或  /state x y 隐身|显形")
+					return true
+				var x := int(parts[1])
+				var y := int(parts[2])
+				var st := parts[3].to_lower()
+				var ppos := Vector2i(x, y)
+				if four_mode:
+					if st == "隐身" or st == "hidden":
+						hidden_pieces4[ppos] = current_side4() + 100
+					else:
+						hidden_pieces4.erase(ppos)
+				else:
+					if st == "隐身" or st == "hidden":
+						hidden_pieces[ppos] = turn + 100
+					else:
+						hidden_pieces.erase(ppos)
+				_show_command_result("(%d,%d) %s" % [x, y, "已隐身" if st == "隐身" or st == "hidden" else "已显形"])
+			queue_redraw()
+			_broadcast_state() if net_role == "host" else null
+			return true
+		_:
+			_show_command_result("未知指令: %s" % cmd)
+			return true
+	return true
+
+
+func _show_command_result(msg: String) -> void:
+	if chat != null:
+		chat.add_message("指令", msg)
+	elif status_label != null:
+		status_label.text = msg
+
+
+# 方名 → side(双人:红/黑;四人:红/黑/绿/蓝;也支持 0-3 数字)
+func _side_from_name(s: String) -> int:
+	var n := s.to_lower()
+	match n:
+		"红", "red", "r", "0": return 0
+		"黑", "black", "b", "1": return 1
+		"绿", "green", "g", "2": return 2
+		"蓝", "blue", "l", "3": return 3
+	return -1
+
+
+func _side_name(side: int) -> String:
+	if four_mode:
+		return SIDE_NAMES4.get(side, "方")
+	return "红方" if side == R.Side.RED else "黑方"
+
+
+# 棋子类型名 → Type(支持中文名与单字母)
+func _piece_type_from_name(s: String) -> int:
+	var n := s.to_lower()
+	match n:
+		"帅", "将", "王", "k": return R.Type.KING
+		"仕", "士", "a": return R.Type.ADVISOR
+		"相", "象", "e": return R.Type.ELEPHANT
+		"马", "h": return R.Type.HORSE
+		"车", "車", "r": return R.Type.ROOK
+		"炮", "砲", "c": return R.Type.CANNON
+		"兵", "卒", "p": return R.Type.PAWN
+		"后", "q": return R.Type.QUEEN
+	return -1
+
+
 # 对局聊天:host 权威转发(客户端发到主机,host 显示并广播给所有人)
 func _send_chat_game(text: String) -> void:
+	# 指令:host 本地执行;client 上报 host 执行
+	if text.strip_edges().begins_with("/"):
+		if net_role == "host":
+			_try_exec_command(text)
+		else:
+			send_chat_game.rpc_id(1, text)
+		return
 	if net_role == "host":
 		var who := _chat_name_host()
 		if chat != null:
@@ -1569,6 +1771,10 @@ func _chat_name_host() -> String:
 @rpc("any_peer", "reliable")
 func send_chat_game(text: String) -> void:
 	if net_role != "host":
+		return
+	# 客户端发来的指令:host 权威执行
+	if text.strip_edges().begins_with("/"):
+		_try_exec_command(text)
 		return
 	var who: String = "玩家"
 	var pid := multiplayer.get_remote_sender_id()

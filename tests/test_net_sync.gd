@@ -535,6 +535,52 @@ func _run() -> void:
 	_check(scene.actions_left == act_before2, "星星正位:点击免费落点走免费移动(不消耗行动)")
 	_check(scene.free_retreat_used, "星星正位:免费移动标记已用(每回合一次)")
 
+	# --- 聊天指令系统 ---
+	scene.net_role = "host"
+	scene.phase = scene.Phase.PLAY
+	scene.four_mode = false
+	scene.board = R.make_board()
+	scene.perks_red = {}
+	scene.perks_black = {}
+	scene.queen_charge = {0: 0, 1: 0}
+	scene.siwang_charge = {0: 0, 1: 0}
+	scene.star2_charge = {0: 0, 1: 0}
+	# /place 放置
+	_check(scene._try_exec_command("/place 3 7 马"), "指令:place 返回 true")
+	_check(scene.board[7][3] != null and scene.board[7][3]["type"] == R.Type.HORSE, "指令:place 放置马")
+	# /place null 摧毁
+	scene._try_exec_command("/place 3 7 null")
+	_check(scene.board[7][3] == null, "指令:place null 摧毁棋子")
+	# /skill 添加/移除
+	scene._try_exec_command("/skill 红 yuzhe on")
+	_check(scene.perks_red.has("yuzhe"), "指令:skill 添加技能")
+	scene._try_exec_command("/skill 红 yuzhe off")
+	_check(not scene.perks_red.has("yuzhe"), "指令:skill 移除技能")
+	# /charge 充能
+	scene._try_exec_command("/charge 红 huanghou 3")
+	_check(scene.queen_charge[R.Side.RED] == 3, "指令:charge 皇后充能")
+	# /state 无敌/反制
+	scene._try_exec_command("/state 红 无敌")
+	_check(scene.invincible_side == R.Side.RED, "指令:state 无敌")
+	scene._try_exec_command("/state 黑 反制")
+	_check(scene.counter_side == R.Side.BLACK, "指令:state 反制")
+	# /state 坐标隐身
+	scene._try_exec_command("/state 2 6 隐身")
+	_check(scene.hidden_pieces.has(Vector2i(2, 6)), "指令:state 坐标隐身")
+	# 四人模式
+	scene.four_mode = true
+	scene.board = R.make_board4()
+	scene.perks4 = {0: {}, 1: {}, 2: {}, 3: {}}
+	scene.queen_charge4 = {0: 0, 1: 0, 2: 0, 3: 0}
+	scene.siwang_charge4 = {0: 0, 1: 0, 2: 0, 3: 0}
+	scene._try_exec_command("/skill 绿 nvjisi on")
+	_check(scene.perks4[2].has("nvjisi"), "指令(四人):skill 添加技能")
+	scene._try_exec_command("/charge 蓝 siwang 2")
+	_check(scene.siwang_charge4[3] == 2, "指令(四人):charge 死亡充能")
+	scene._try_exec_command("/place 5 5 炮")
+	_check(scene.board[5][5] != null and scene.board[5][5]["type"] == R.Type.CANNON, "指令(四人):place 放置炮")
+	scene.four_mode = false
+
 	if _failures == 0:
 		print("== NET SYNC OK ==")
 	else:
