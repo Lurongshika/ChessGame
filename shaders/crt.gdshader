@@ -5,7 +5,7 @@ shader_type canvas_item;
 uniform sampler2D screen_texture : hint_screen_texture, filter_linear;
 
 uniform float scan_intensity : hint_range(0.0, 0.3) = 0.08;
-uniform float curve_val : hint_range(1.0, 20.0) = 10.0;
+uniform float curve_val : hint_range(1.0, 20.0) = 12.0;
 uniform float aberration : hint_range(0.0, 0.01) = 0.0012;
 uniform float blur_size : hint_range(0.0, 0.01) = 0.0015;
 uniform float brightness : hint_range(0.8, 1.6) = 1.15;
@@ -15,7 +15,7 @@ vec2 curve(vec2 uv) {
 	uv = (uv - 0.5) * 2.0;
 	vec2 offset = abs(uv.yx) / vec2(max(curve_val, 1.0), max(curve_val, 1.0));
 	uv = uv + uv * offset * offset;
-	uv = uv * 0.78;  // 整体向内压缩,避免边缘超出屏幕
+	uv = uv * 0.94;  // 轻微向内收,保证画面完整不超屏
 	uv = (uv / 2.0) + 0.5;
 	return uv;
 }
