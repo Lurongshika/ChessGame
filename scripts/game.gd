@@ -1787,6 +1787,7 @@ func _state_to_data() -> Dictionary:
 		"controlled_all_turns": controlled_all_turns,
 		"controlled_all_owner": controlled_all_owner,
 		"pope_guarded": _pope_to_data(),
+		"move_history": _moves_to_json(),
 	}
 
 
@@ -1875,6 +1876,10 @@ func _apply_state_data(data: Dictionary) -> void:
 	selected = Vector2i(-1, -1)
 	moves_cache = []
 	free_retreat_targets = []
+	# 对局记录同步:以主机 move_history 为准(含双方技能记录)
+	if data.has("move_history"):
+		move_history = _moves_from_json(data["move_history"])
+		_refresh_move_log()
 	_update_ui()
 	queue_redraw()
 
@@ -1913,7 +1918,9 @@ func request_skill(perk_id: String, params: Dictionary) -> void:
 	if not _is_active_skill(perk_id):
 		return
 	print("NET: host skill request ", perk_id, " ", params)
+	_record_skill(R.Side.BLACK, perk_id)
 	_apply_net_skill(perk_id, params)
+	_snapshot_last_board()
 	_broadcast_state()
 
 
@@ -5606,6 +5613,7 @@ func _state_to_data4() -> Dictionary:
 		"controlled_turns4": controlled_turns4,
 		"pope_guarded4": _pope_to_data4(),
 		"perks4": perks_all,
+		"record4_history": _record4_history,
 	}
 
 
@@ -5689,6 +5697,12 @@ func _apply_state_data4(data: Dictionary) -> void:
 			perks4[int(side_str)] = data["perks4"][side_str].duplicate()
 	selected4 = Vector2i(-1, -1)
 	moves4 = []
+	# 对局记录同步:以主机 record4_history 为准(含双方技能使用)
+	if data.has("record4_history"):
+		_record4_history = []
+		for rec in data["record4_history"]:
+			_record4_history.append({"text": str(rec.get("text", "")), "turn": int(rec.get("turn", 0))})
+		_refresh_record4()
 	_refresh_perk_panels4()
 	_update_status4()
 	queue_redraw()
@@ -5807,6 +5821,7 @@ func _execute_skill4(perk_id: String, side: int, params: Dictionary) -> void:
 				invincible_piece4 = pos
 				invincible_piece_side4 = side
 				_apply_skill_cd4("huangdi", side)
+				_record_skill4(side, "huangdi")
 				_show_status4("皇帝:该子本回合无敌")
 				_consume_turn_after_skill4()
 				queue_redraw()
@@ -5817,6 +5832,7 @@ func _execute_skill4(perk_id: String, side: int, params: Dictionary) -> void:
 					return
 				suicide_mark4 = {"pos": pos, "side": side}
 				_apply_skill_cd4("huangdi2", side)
+				_record_skill4(side, "huangdi2")
 				_show_status4("皇帝:标记棋子,被吃时同归于尽")
 				_consume_turn_after_skill4()
 				queue_redraw()
@@ -5829,6 +5845,7 @@ func _execute_skill4(perk_id: String, side: int, params: Dictionary) -> void:
 					return
 				siwang_charge4[side] -= 1
 				_destroy_same_type4(pos, side)
+				_record_skill4(side, "siwang")
 				_consume_turn_after_skill4()
 				queue_redraw()
 				return
@@ -5839,6 +5856,7 @@ func _execute_skill4(perk_id: String, side: int, params: Dictionary) -> void:
 				controlled_piece4 = {"pos": pos, "owner": side}
 				controlled_turns4 = 3 if perk_id == "diaodiao2" else 1
 				_apply_skill_cd4(perk_id, side)
+				_record_skill4(side, perk_id)
 				_show_status4("倒吊人:获得对方棋子控制权")
 				_consume_turn_after_skill4()
 				queue_redraw()
