@@ -45,8 +45,8 @@ vec3 crt_color(vec2 crt_uv) {
 	float scan = sin(crt_uv.y * 800.0 + TIME * 5.0) * scan_intensity;
 	col -= scan;
 
-	// 暗角(边缘变暗)
-	float vignette = smoothstep(0.65, 0.35, dist);
+	// 暗角(几乎取消:只在最角落轻微,最低 0.95)
+	float vignette = mix(0.95, 1.0, smoothstep(0.95, 0.6, dist));
 	col *= vignette;
 
 	// 整体提亮
