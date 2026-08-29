@@ -303,6 +303,39 @@ func _run() -> void:
 	scene.turn = R.Side.BLACK
 	_check(scene._validate_move(Vector2i(3, 0), Vector2i(3, 8), "move", R.Side.BLACK) == false, "教皇:受保护棋子不可被吃")
 
+	# --- 对局记录同步:敌我双方技能都随状态广播 ---
+	scene.net_role = "host"
+	scene.phase = scene.Phase.PLAY
+	scene.perks_red = {"yuzhe": true}
+	scene.perks_black = {"nvjisi": true}
+	scene._setup_board()
+	scene.turn = R.Side.RED
+	scene.actions_left = 1
+	scene.move_history = []
+	scene._record_skill(R.Side.RED, "yuzhe")     # 主机(红方)技能
+	scene._record_skill(R.Side.BLACK, "nvjisi")  # 客户端(黑方)技能
+	var hist_kinds: Array = []
+	for m in scene.move_history:
+		hist_kinds.append(str(m["side"]) + ":" + str(m["kind"]))
+	_check(hist_kinds.has("0:skill") and hist_kinds.has("1:skill"), "双人:双方技能都进入 move_history")
+	var data_sync = scene._state_to_data()
+	_check(data_sync.has("move_history"), "双人:状态广播包含 move_history")
+	scene.move_history = []
+	scene._apply_state_data(data_sync)
+	var restored: Array = []
+	for m in scene.move_history:
+		restored.append(str(m["side"]) + ":" + str(m["kind"]))
+	_check(restored.has("0:skill") and restored.has("1:skill"), "双人:客户端收到广播后含双方技能记录")
+	# 四人:record4_history 随状态广播
+	scene._record4_history = []
+	scene._record_skill4(0, "nvjisi")
+	scene._record_skill4(2, "yuzhe")
+	var data4_sync = scene._state_to_data4()
+	_check(data4_sync.has("record4_history") and data4_sync["record4_history"].size() == 2, "四人:状态广播包含 record4_history")
+	scene._record4_history = []
+	scene._apply_state_data4(data4_sync)
+	_check(scene._record4_history.size() == 2, "四人:客户端收到广播后含双方技能记录")
+
 	if _failures == 0:
 		print("== NET SYNC OK ==")
 	else:
