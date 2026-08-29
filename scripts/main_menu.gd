@@ -16,7 +16,7 @@ func _ready() -> void:
 	# 继续对局(有存档时显示)
 	if _has_any_save():
 		var btn0 := _button("继续对局", Vector2(540, 240))
-		btn0.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/slots.tscn"))
+		btn0.pressed.connect(func(): Global.change_scene_with_fade("res://scenes/slots.tscn"))
 		add_child(btn0)
 		menu_btns.append(btn0)
 
@@ -31,7 +31,7 @@ func _ready() -> void:
 	menu_btns.append(btn3)
 
 	var btn4 := _button("技能图鉴", Vector2(540, 450))
-	btn4.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/manual.tscn"))
+	btn4.pressed.connect(func(): Global.change_scene_with_fade("res://scenes/manual.tscn"))
 	add_child(btn4)
 	menu_btns.append(btn4)
 
@@ -51,7 +51,7 @@ func _ready() -> void:
 
 func _auto_enter_net() -> void:
 	# 延迟到本帧结束再切场景,避免在 _ready 中切换导致 remove_child 报错
-	get_tree().change_scene_to_file("res://scenes/game.tscn")
+	Global.change_scene_with_fade("res://scenes/game.tscn")
 
 
 func _has_user_arg(prefix: String) -> bool:
@@ -129,7 +129,7 @@ func _show_net_create() -> void:
 		Global.perk_pool = "all"
 		print("创建房间: 人数=", net_players, " 模式=", net_mode, " standard_mode=", Global.standard_mode)
 		Global.net_role = "host"
-		get_tree().change_scene_to_file("res://scenes/lobby.tscn")
+		Global.change_scene_with_fade("res://scenes/lobby.tscn")
 	)
 	_add_option_button("返回", Vector2(540, 580), _show_net_options)
 
@@ -159,7 +159,7 @@ func _show_net_join() -> void:
 		Global.net_role = "client"
 		var ip := ip_edit.text.strip_edges()
 		Global.server_ip = ip if not ip.is_empty() else "127.0.0.1"
-		get_tree().change_scene_to_file("res://scenes/lobby.tscn")
+		Global.change_scene_with_fade("res://scenes/lobby.tscn")
 	)
 	_add_option_button("返回", Vector2(540, 440), _show_net_options)
 
@@ -271,7 +271,7 @@ func _build_user_button() -> void:
 	user_btn.icon = _current_avatar_icon(profile, user_color, 40)
 	user_btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	user_btn.tooltip_text = "用户设置"
-	user_btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/user.tscn"))
+	user_btn.pressed.connect(func(): Global.change_scene_with_fade("res://scenes/user.tscn"))
 	add_child(user_btn)
 
 	var uname: String = profile.get("username", "")
@@ -322,7 +322,7 @@ func _start_local_pool(mode: String, standard: bool, pool: String) -> void:
 	Global.load_slot = 0
 	Global.standard_mode = standard
 	Global.perk_pool = pool
-	get_tree().change_scene_to_file("res://scenes/game.tscn")
+	Global.change_scene_with_fade("res://scenes/game.tscn")
 
 
 func _has_any_save() -> bool:

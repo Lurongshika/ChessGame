@@ -24,8 +24,57 @@ const COLORS16 := [
 ]
 
 
+# --- 场景过渡(淡入淡出) ---
+var _fade_layer: CanvasLayer
+var _fade_rect: ColorRect
+var _fade_alpha := 1.0
+var _fade_target := 0.0
+var _fade_speed := 3.2
+var _pending_scene := ""
+var _switching := false
+
+
 func _ready() -> void:
-	# 支持命令行参数启动(用于自动化测试):--net=host/client --ip=192.168.x.x --port=7777 --mode=pvp/ai --slot=1 --pool=normal/advanced
+	# 过渡层(最高层,常驻)
+	_fade_layer = CanvasLayer.new()
+	_fade_layer.layer = 100
+	add_child(_fade_layer)
+	_fade_rect = ColorRect.new()
+	_fade_rect.color = Color(0, 0, 0, 1)
+	_fade_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_fade_layer.add_child(_fade_rect)
+	set_process(true)
+	# 开局淡入(从黑到透明)
+	_fade_alpha = 1.0
+	_fade_target = 0.0
+
+
+func _process(delta: float) -> void:
+	if absf(_fade_alpha - _fade_target) < 0.005:
+		_fade_alpha = _fade_target
+	else:
+		_fade_alpha = move_toward(_fade_alpha, _fade_target, _fade_speed * delta)
+	_fade_rect.color.a = _fade_alpha
+	# 淡出完成且有待切换场景
+	if _switching and _fade_alpha >= 1.0 and _pending_scene != "":
+		_switching = false
+		var sc := _pending_scene
+		_pending_scene = ""
+		get_tree().change_scene_to_file(sc)
+		# 新场景就绪后淡入
+		_fade_target = 0.0
+
+
+# 带过渡的场景切换:淡出 → 切换 → 淡入
+func change_scene_with_fade(path: String) -> void:
+	if _pending_scene != "":
+		return
+	_pending_scene = path
+	_switching = true
+	_fade_target = 1.0
+
+
+# 支持命令行参数启动(用于自动化测试):--net=host/client --ip=192.168.x.x --port=7777 --mode=pvp/ai --slot=1 --pool=normal/advanced
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--net="):
 			net_role = arg.trim_prefix("--net=")

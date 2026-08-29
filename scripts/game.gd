@@ -340,9 +340,9 @@ func _build_ui() -> void:
 	quit_btn.pressed.connect(func():
 		if Global.demo_perk != "":
 			Global.demo_perk = ""
-			get_tree().change_scene_to_file("res://scenes/manual.tscn")
+			Global.change_scene_with_fade("res://scenes/manual.tscn")
 		else:
-			get_tree().change_scene_to_file("res://scenes/main.tscn")
+			Global.change_scene_with_fade("res://scenes/main.tscn")
 	)
 	ui.add_child(quit_btn)
 
@@ -537,7 +537,7 @@ func _build_ui4() -> void:
 	_build_record_panel()
 	# 返回菜单按钮
 	var quit_btn := _make_button("返回菜单", Vector2(1280 - 224 - 12, 720 - 44 - 12), Vector2(224, 44))
-	quit_btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/main.tscn"))
+	quit_btn.pressed.connect(func(): Global.change_scene_with_fade("res://scenes/main.tscn"))
 	ui.add_child(quit_btn)
 
 
@@ -3343,7 +3343,7 @@ func _show_result() -> void:
 			get_tree().reload_current_scene()
 		else:
 			# 联机局:回到主菜单重新建房/加入
-			get_tree().change_scene_to_file("res://scenes/main.tscn")
+			Global.change_scene_with_fade("res://scenes/main.tscn")
 	)
 	result_root.add_child(again)
 	# 复盘本局(有走子记录时)
@@ -3355,9 +3355,9 @@ func _show_result() -> void:
 	menu.pressed.connect(func():
 		if Global.demo_perk != "":
 			Global.demo_perk = ""
-			get_tree().change_scene_to_file("res://scenes/manual.tscn")
+			Global.change_scene_with_fade("res://scenes/manual.tscn")
 		else:
-			get_tree().change_scene_to_file("res://scenes/main.tscn")
+			Global.change_scene_with_fade("res://scenes/main.tscn")
 	)
 	result_root.add_child(menu)
 

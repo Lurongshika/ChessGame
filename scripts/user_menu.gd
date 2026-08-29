@@ -108,7 +108,7 @@ func _ready() -> void:
 	add_child(save_btn)
 
 	var back_btn := _button("返回", Vector2(540, 600), Vector2(200, 52))
-	back_btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/main.tscn"))
+	back_btn.pressed.connect(func(): Global.change_scene_with_fade("res://scenes/main.tscn"))
 	add_child(back_btn)
 
 	_load_profile()
@@ -183,7 +183,7 @@ func _save() -> void:
 	f.store_string(JSON.stringify(data))
 	f.close()
 	# 保存后返回主菜单
-	get_tree().change_scene_to_file("res://scenes/main.tscn")
+	Global.change_scene_with_fade("res://scenes/main.tscn")
 
 
 func _load_profile() -> void:

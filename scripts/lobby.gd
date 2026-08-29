@@ -111,7 +111,7 @@ func _ready() -> void:
 	var back := _make_button("返回菜单", Vector2(1280 - 140 - 20, 620), Vector2(140, 44))
 	back.pressed.connect(func():
 		multiplayer.multiplayer_peer = null
-		get_tree().change_scene_to_file("res://scenes/main.tscn")
+		Global.change_scene_with_fade("res://scenes/main.tscn")
 	)
 	add_child(back)
 
@@ -564,7 +564,7 @@ func start_game(colors: Dictionary, mode: String, standard: bool, lobby_players:
 	if not game_rules.is_empty():
 		Global.game_rules = game_rules
 	# 保持连接,直接进入对局(game 复用大厅连接)
-	get_tree().change_scene_to_file("res://scenes/game.tscn")
+	Global.change_scene_with_fade("res://scenes/game.tscn")
 
 
 func _make_label(text: String, size: int, color: Color) -> Label:

@@ -53,7 +53,7 @@ func _ready() -> void:
 	add_child(btn_join)
 
 	var btn_back := _button("返回", Vector2(540, 500))
-	btn_back.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/main.tscn"))
+	btn_back.pressed.connect(func(): Global.change_scene_with_fade("res://scenes/main.tscn"))
 	add_child(btn_back)
 
 
@@ -71,7 +71,7 @@ func _port_edit(pos: Vector2) -> LineEdit:
 func _host(port_text: String) -> void:
 	Global.port = _parse_port(port_text, Global.port)
 	Global.net_role = "host"
-	get_tree().change_scene_to_file("res://scenes/game.tscn")
+	Global.change_scene_with_fade("res://scenes/game.tscn")
 
 
 func _join(ip: String, port_text: String) -> void:
@@ -80,7 +80,7 @@ func _join(ip: String, port_text: String) -> void:
 	Global.port = _parse_port(port_text, Global.port)
 	Global.net_role = "client"
 	Global.server_ip = ip.strip_edges()
-	get_tree().change_scene_to_file("res://scenes/game.tscn")
+	Global.change_scene_with_fade("res://scenes/game.tscn")
 
 
 func _parse_port(text: String, fallback: int) -> int:

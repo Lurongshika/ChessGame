@@ -19,7 +19,7 @@ func _ready() -> void:
 	_build_slots()
 
 	back_btn = _button("返回", Vector2(540, 500), Vector2(200, 52))
-	back_btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/main.tscn"))
+	back_btn.pressed.connect(func(): Global.change_scene_with_fade("res://scenes/main.tscn"))
 	add_child(back_btn)
 
 
@@ -46,7 +46,7 @@ func _path(slot: int) -> String:
 func _load_slot(slot: int) -> void:
 	Global.net_role = "local"
 	Global.load_slot = slot
-	get_tree().change_scene_to_file("res://scenes/game.tscn")
+	Global.change_scene_with_fade("res://scenes/game.tscn")
 
 
 func _delete_slot(slot: int) -> void:

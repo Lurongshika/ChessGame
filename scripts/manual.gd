@@ -1552,7 +1552,7 @@ func _ready() -> void:
 	add_child(title)
 
 	var back := _make_button("返回菜单", Vector2(20, 20), Vector2(140, 42))
-	back.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/main.tscn"))
+	back.pressed.connect(func(): Global.change_scene_with_fade("res://scenes/main.tscn"))
 	add_child(back)
 
 	# 左侧技能列表
@@ -1643,7 +1643,7 @@ func _start_demo() -> void:
 	if current_id.is_empty():
 		return
 	Global.demo_perk = current_id
-	get_tree().change_scene_to_file("res://scenes/game.tscn")
+	Global.change_scene_with_fade("res://scenes/game.tscn")
 
 
 func _make_label(text: String, size: int, color: Color) -> Label:
