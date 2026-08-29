@@ -1,9 +1,9 @@
 // Balatro 风格背景:深色有机流动光晕 + 像素化(UV 量化 + 色阶 posterize)
+// 注意:只像素化,不加噪点颗粒
 shader_type canvas_item;
 
 uniform float time_scale : hint_range(0.0, 3.0) = 0.9;
 uniform float warp_strength : hint_range(0.0, 2.5) = 1.2;
-uniform float grain_amount : hint_range(0.0, 0.1) = 0.022;
 uniform float pixel_density : hint_range(40.0, 300.0) = 150.0;  // 像素化密度(越小块越大)
 uniform float color_levels : hint_range(8.0, 64.0) = 26.0;      // 色阶数(越小越像素)
 
@@ -60,10 +60,6 @@ void fragment() {
 
 	// 像素化:色阶 posterize(减少颜色层级,硬边像素感)
 	col = floor(col * color_levels) / color_levels;
-
-	// 微颗粒质感(配合像素块)
-	float grain = hash(floor(UV * pixel_density) * 1.7 + floor(TIME * 8.0));
-	col += (grain - 0.5) * (grain_amount * 1.6);
 
 	COLOR = vec4(col, 1.0);
 }
