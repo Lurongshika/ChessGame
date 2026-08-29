@@ -1600,7 +1600,6 @@ func _ready() -> void:
 	# 默认选中第一个技能(愚者)
 	if not Perks.PERKS_NORMAL.is_empty():
 		_select_skill(Perks.PERKS_NORMAL[0]["id"])
-		_highlight_first_skill()
 
 
 func _build_list() -> void:
@@ -1612,6 +1611,7 @@ func _build_list() -> void:
 		b.custom_minimum_size = Vector2(240, 40)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.pressed.connect(func(sid: String = id): _select_skill(sid))
+		b.set_meta("skill_id", id)
 		list_box.add_child(b)
 	for row in Perks.PERKS_ADVANCED:
 		var id2: String = row["id"]
@@ -1619,25 +1619,37 @@ func _build_list() -> void:
 		b2.custom_minimum_size = Vector2(240, 40)
 		b2.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b2.pressed.connect(func(sid: String = id2): _select_skill(sid))
+		b2.set_meta("skill_id", id2)
 		list_box.add_child(b2)
 
 
-# 高亮列表第一个按钮(默认选中)
-func _highlight_first_skill() -> void:
-	if list_box != null and list_box.get_child_count() > 0:
-		var first: Button = list_box.get_child(0)
+# 高亮选中的技能按钮(清除其他高亮,恢复透明)
+func _highlight_skill(id: String) -> void:
+	if list_box == null:
+		return
+	for child in list_box.get_children():
+		if not child is Button:
+			continue
+		var b: Button = child
+		var selected: bool = str(b.get_meta("skill_id", "")) == id
 		var sb := StyleBoxFlat.new()
-		sb.bg_color = Color(0.18, 0.22, 0.3)
+		if selected:
+			sb.bg_color = Color(0.18, 0.22, 0.3)
+			sb.border_color = Color(0.95, 0.8, 0.2)
+			sb.set_border_width_all(2)
+		else:
+			sb.bg_color = Color(0, 0, 0, 0)
+			sb.border_color = Color(0, 0, 0, 0)
+			sb.set_border_width_all(0)
 		sb.set_corner_radius_all(4)
-		sb.border_color = Color(0.95, 0.8, 0.2)
-		sb.set_border_width_all(2)
-		first.add_theme_stylebox_override("normal", sb)
-		first.add_theme_stylebox_override("hover", sb)
-		first.add_theme_stylebox_override("pressed", sb)
+		b.add_theme_stylebox_override("normal", sb)
+		b.add_theme_stylebox_override("hover", sb)
+		b.add_theme_stylebox_override("pressed", sb)
 
 
 # 点击技能:显示技能描述(不立即进对局)
 func _select_skill(id: String) -> void:
+	_highlight_skill(id)
 	current_id = id
 	var perks := Perks.load_perks("all")
 	var pk: Dictionary = perks.get(id, {})
