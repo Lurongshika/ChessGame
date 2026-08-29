@@ -123,6 +123,7 @@ func _show_net_create() -> void:
 	opt_root.add_child(p4_btn)
 	net_players_btns.append(p4_btn)
 	_refresh_net_players_highlight()
+	_animate_opt_extra_buttons([skill_btn, std_btn, p2_btn, p4_btn])
 	_add_option_button("创建房间", Vector2(540, 500), func():
 		Global.port = Global.port
 		Global.game_mode = "four" if net_players == 4 else "pvp"
@@ -155,6 +156,7 @@ func _show_net_join() -> void:
 	port_edit.add_theme_font_override("font", _font())
 	port_edit.add_theme_font_size_override("font_size", 17)
 	opt_root.add_child(port_edit)
+	_animate_opt_extra_buttons([])
 	_add_option_button("加入房间", Vector2(540, 360), func():
 		Global.port = _parse_port(port_edit.text)
 		Global.net_role = "client"
@@ -231,6 +233,35 @@ func _add_option_button(text: String, pos: Vector2, cb: Callable) -> void:
 	var b := _button(text, pos)
 	b.pressed.connect(cb)
 	opt_root.add_child(b)
+	_animate_option_button(b)
+
+
+# 选项层按钮动画:淡入 + 上浮(依次出现)
+func _animate_option_button(b: Button) -> void:
+	var idx := 0
+	for child in opt_root.get_children():
+		if child is Button:
+			idx += 1
+	b.modulate.a = 0.0
+	var orig_pos: Vector2 = b.position
+	b.position = orig_pos + Vector2(0, 14)
+	var tw := create_tween()
+	tw.tween_interval((idx - 1) * 0.06)
+	tw.tween_property(b, "modulate:a", 1.0, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(b, "position", orig_pos, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+# 给创建/加入界面的直接按钮补动画(模式/人数/输入框等)
+func _animate_opt_extra_buttons(btns: Array) -> void:
+	for b in btns:
+		_animate_option_button(b)
+	# 输入框淡入
+	for child in opt_root.get_children():
+		if child is LineEdit:
+			child.modulate.a = 0.0
+			var tw := create_tween()
+			tw.tween_interval(0.1)
+			tw.tween_property(child, "modulate:a", 1.0, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
 func _close_options() -> void:

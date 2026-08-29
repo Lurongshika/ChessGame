@@ -65,12 +65,19 @@ static func animate_ui_in(root: Node) -> void:
 		if b.modulate.a <= 0.01:
 			continue
 		b.modulate.a = 0.0
-		var orig_pos: Vector2 = b.position
-		b.position = orig_pos + Vector2(0, 16)
 		var tw := root.create_tween()
 		tw.tween_interval(i * 0.06)
 		tw.tween_property(b, "modulate:a", 1.0, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		tw.parallel().tween_property(b, "position", orig_pos, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		# 容器内按钮(由容器布局)只淡入,不动位置;自由定位按钮淡入+上浮
+		if not _in_container(b):
+			var orig_pos: Vector2 = b.position
+			b.position = orig_pos + Vector2(0, 16)
+			tw.parallel().tween_property(b, "position", orig_pos, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+static func _in_container(b: Control) -> bool:
+	var parent := b.get_parent()
+	return parent is VBoxContainer or parent is HBoxContainer or parent is GridContainer
 
 
 static func _collect_buttons(node: Node, out: Array) -> void:
