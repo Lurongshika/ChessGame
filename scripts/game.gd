@@ -5268,19 +5268,19 @@ func _maybe_ai() -> void:
 		_perform_move(mv["from"], mv["to"])
 
 
-# AI 选走法:隐身的子不能吃子(自动避开非法吃子)
+# AI 选走法:自动避开会被规则拦截的吃子(隐身子/教皇保护/无敌/恶魔禁吃)
 func _choose_ai_move() -> Dictionary:
 	var best := AI.choose_move(board, turn, perks_red, perks_black)
 	if best.is_empty():
 		return {}
 	var from: Vector2i = best["from"]
 	var to: Vector2i = best["to"]
-	if hidden_pieces.has(from) and board[to.y][to.x] != null:
-		# 首选:该子不吃子的走法
+	if _ai_move_blocked(from, to):
+		# 首选:该子其它不被拦截的走法
 		for m in R.legal_moves(board, from, perks_red, perks_black):
-			if board[m.y][m.x] == null:
+			if not _ai_move_blocked(from, m):
 				return {"from": from, "to": m}
-		# 次选:其它棋子的任意合法走法
+		# 次选:其它棋子的任意不被拦截走法
 		for r in R.ROWS:
 			for c in R.COLS:
 				var p = board[r][c]
@@ -5288,9 +5288,36 @@ func _choose_ai_move() -> Dictionary:
 					continue
 				var f2 := Vector2i(c, r)
 				for m2 in R.legal_moves(board, f2, perks_red, perks_black):
-					if not (hidden_pieces.has(f2) and board[m2.y][m2.x] != null):
+					if not _ai_move_blocked(f2, m2):
 						return {"from": f2, "to": m2}
+		return {}
 	return best
+
+
+# AI 走法是否会被规则拦截(与 _validate_move 的拦截一致)
+func _ai_move_blocked(from: Vector2i, to: Vector2i) -> bool:
+	var mover = board[from.y][from.x]
+	if mover == null:
+		return true
+	var captured = board[to.y][to.x]
+	if captured == null:
+		return false
+	# 隐身的子不能吃子
+	if hidden_pieces.has(from):
+		return true
+	var ts: int = captured["side"]
+	# 无敌/教皇保护:不可吃
+	if to == invincible_piece or invincible_side == ts:
+		return true
+	if pope_guarded.has(to):
+		return true
+	# 恶魔:敌方同类型子被禁吃
+	if perks_of(ts).has("emo") and last_eat["side"] == turn and last_eat["type"] == mover["type"]:
+		return true
+	# 恶魔逆位:被吃方 2 回合内只能被该类型攻击
+	if perks_of(ts).has("emo2") and emo2_turns[ts] > 0 and mover["type"] != emo2_type[ts]:
+		return true
+	return false
 
 
 # ==================== 渲染 ====================
