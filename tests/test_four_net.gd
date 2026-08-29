@@ -48,6 +48,49 @@ func _run() -> void:
 	var data2 = game._state_to_data4()
 	game._apply_state_data4(data2)
 	_check(true, "状态往返 OK")
+
+	# --- 四人隐者逆位:隐身标记生效 + 联机视角可见性 ---
+	game.four_mode = true
+	game.net_role = "host"
+	game.my_side4 = 1  # 本机黑方
+	game.board = R.make_board4()
+	game.perks4 = {0: {"yinzhe2": true}, 1: {}, 2: {}, 3: {}}
+	game.turn4 = 2  # 红方回合
+	game.actions_left4 = 1
+	game._skill_hermit4("yinzhe2", 0)
+	_check(game.hidden_pieces4.size() > 0, "四人隐者逆位:红方棋子全部隐身")
+	_check(not game._is_visible_hidden4(0), "本机黑方视角:红方隐身不可见(联机)")
+	# 本机(黑方)自己使用隐者逆位:自己的隐身可见
+	game.hidden_pieces4 = {}
+	game.turn4 = 0  # 黑方回合
+	game.actions_left4 = 1
+	game._skill_hermit4("yinzhe2", 1)
+	_check(game._is_visible_hidden4(1), "本机视角:自己的隐身可见(联机)")
+	_check(not game._is_visible_hidden4(0), "红方视角:黑方隐身不可见(联机)")
+	# 本地四人:全可见
+	game.net_role = "local"
+	game.my_side4 = -1
+	_check(game._is_visible_hidden4(0) and game._is_visible_hidden4(1), "本地四人:同屏全可见")
+	# 隐身子不能吃子:选隐身兵,吃子目标被过滤
+	game.board = R.make_board4()
+	game.hidden_pieces4 = {}
+	var hpawn := Vector2i(-1, -1)
+	for rr in 17:
+		for cc in 17:
+			var q = game.board[rr][cc]
+			if q != null and q["side"] == 0 and q["type"] == R.Type.PAWN:
+				hpawn = Vector2i(cc, rr)
+				break
+	game.hidden_pieces4[hpawn] = 100
+	game.selected4 = Vector2i(-1, -1)
+	game.moves4 = []
+	game._select4(hpawn)
+	var has_capture := false
+	for m in game.moves4:
+		if game.board[m.y][m.x] != null:
+			has_capture = true
+	_check(not has_capture, "四人隐身子:不能吃子(吃子目标被过滤)")
+
 	quit(0 if _fail_count == 0 else 1)
 
 

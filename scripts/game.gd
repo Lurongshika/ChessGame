@@ -4470,6 +4470,13 @@ func _is_visible_hidden(side: int) -> bool:
 	return true  # 本地模式(人机/双人)同屏,双方都可见
 
 
+# 四人:联机时只有本机视角能看到自己的隐身棋子;本地四人同屏全可见
+func _is_visible_hidden4(side: int) -> bool:
+	if net_role == "local" or my_side4 < 0:
+		return true
+	return side == my_side4
+
+
 func _select(pos: Vector2i) -> void:
 	# 额外行动(命运之轮):本回合已移动过的棋子不能再次移动
 	if first_moved.x >= 0 and pos == first_moved:
@@ -4839,10 +4846,17 @@ func _draw_pieces4() -> void:
 			var p = board[r][c]
 			if p == null:
 				continue
-			var center := _pos_px4(Vector2i(c, r))
+			var hpos := Vector2i(c, r)
+			var is_hidden: bool = hidden_pieces4.has(hpos)
+			# 对方视角的隐身棋子:完全看不到,不绘制
+			if is_hidden and not _is_visible_hidden4(int(hidden_pieces4[hpos]) % 100):
+				continue
+			var center := _pos_px4(hpos)
 			if anim_targets.has(center):
 				continue  # 动画棋子由动画层绘制
-			_draw_piece4(center, p)
+			# 己方隐身子:半透明显示(可见"隐身中",且不能吃子)
+			var alpha := 0.38 if is_hidden else 1.0
+			_draw_piece4(center, p, alpha)
 	# 动画层:棋子从起点平滑移动到终点
 	for a in _move_anims:
 		var prog: float = clampf(a["t"] / a["dur"], 0.0, 1.0)
@@ -4887,14 +4901,14 @@ func _draw_debris() -> void:
 
 
 # 绘制单个棋子(圆 + 名字 + 颜色,可指定中心像素)
-func _draw_piece4(center: Vector2, p: Dictionary) -> void:
-	draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(15, 15), Vector2(30, 30)), false, Color(0.3, 0.22, 0.14))
-	draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(14, 14), Vector2(28, 28)), false, Color(0.95, 0.9, 0.78))
+func _draw_piece4(center: Vector2, p: Dictionary, alpha: float = 1.0) -> void:
+	draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(15, 15), Vector2(30, 30)), false, Color(0.3, 0.22, 0.14, alpha))
+	draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(14, 14), Vector2(28, 28)), false, Color(0.95, 0.9, 0.78, alpha))
 	var sid: int = p["side"]
-	var piece_col: Color = _side_color(sid)
+	var piece_col: Color = _side_color(sid, alpha)
 	if grey_side4 == sid:
-		piece_col = Color(0.55, 0.55, 0.55)
-		draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(14, 14), Vector2(28, 28)), false, Color(0.5, 0.5, 0.5))
+		piece_col = Color(0.55, 0.55, 0.55, alpha)
+		draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(14, 14), Vector2(28, 28)), false, Color(0.5, 0.5, 0.5, alpha))
 	var name: String = R.PIECE_NAMES[p["type"]] if (sid == 0 or sid == 2) else R.PIECE_NAMES_BLACK[p["type"]]
 	_draw_text(center + Vector2(2, -1), name, 16, piece_col)
 
@@ -4913,10 +4927,18 @@ func _draw_overlay4() -> void:
 		draw_arc(_pos_px4(selected4), 16.0, 0, TAU, 24, Color(0.95, 0.8, 0.2), 2.5)
 	for m in moves4:
 		var t = board[m.y][m.x]
-		if t != null:
+		# 落位指示器:对方看不到的隐身子视作空位(绿点),避免暴露隐身位置
+		var hidden_target4: bool = t != null and hidden_pieces4.has(m) and not _is_visible_hidden4(int(hidden_pieces4[m]) % 100)
+		if t != null and not hidden_target4:
 			draw_arc(_pos_px4(m), 14.0, 0, TAU, 24, Color(0.85, 0.3, 0.25), 2.5)
 		else:
 			draw_circle(_pos_px4(m), 4.0, Color(0.2, 0.7, 0.3, 0.9))
+	# 隐者:己方可见的隐身棋子(蓝色圈 + "隐"字);对方视角完全看不到,不画标记
+	for hpos in hidden_pieces4:
+		if not _is_visible_hidden4(int(hidden_pieces4[hpos]) % 100):
+			continue
+		draw_arc(_pos_px4(hpos), 17.0, 0, TAU, 32, Color(0.4, 0.85, 1.0, 0.95), 3.0)
+		_draw_text(_pos_px4(hpos) + Vector2(0, -24), "隐", 13, Color(0.4, 0.85, 1.0))
 
 
 func _handle_input4(event: InputEvent) -> void:
@@ -4973,9 +4995,24 @@ func _select4(pos: Vector2i) -> void:
 	moves4 = R.raw_moves4(board, pos, perks_arr)
 	# 过滤:四角不可到达(棋盘四角没有渲染线)
 	var filtered: Array = []
+	# 隐者:隐身的子不能吃子(只能移动);倒吊人逆位:全控制棋子不能吃子
+	var self_hidden4: bool = hidden_pieces4.has(pos)
+	var all_control4: bool = controlled_all_turns4 > 0 and controlled_all_owner4 == current_side4()
+	var mover_side4: int = board[pos.y][pos.x]["side"] if board[pos.y][pos.x] != null else -1
+	var controlled4: bool = all_control4 and mover_side4 != current_side4()
 	for m in moves4:
 		if _is_corner4(m):
 			continue
+		# 隐身子 / 全控制棋子:只能移到空位,不能吃子
+		if board[m.y][m.x] != null and (self_hidden4 or controlled4):
+			continue
+		# 过滤受保护目标:皇后无敌 / 皇帝指定无敌 / 教皇象无敌
+		if board[m.y][m.x] != null:
+			var ts4: int = board[m.y][m.x]["side"]
+			if invincible_side4 == ts4 or m == invincible_piece4:
+				continue
+			if pope_guarded4.has(m):
+				continue
 		filtered.append(m)
 	moves4 = filtered
 	queue_redraw()
