@@ -3070,9 +3070,14 @@ func _perform_move(from: Vector2i, to: Vector2i) -> void:
 			return
 	# first_moved 记录棋子移动后的新位置,用于"额外回合不能连移同子"检查
 	first_moved = to
-	# 命运之轮(进阶):协同棋子移动不消耗步数
-	if not from in sync_pieces:
+	# 命运之轮(进阶):协同棋子移动不消耗步数;协同位置跟随棋子移动
+	var was_sync: bool = from in sync_pieces
+	if not was_sync:
 		actions_left -= 1
+	else:
+		var si := sync_pieces.find(from)
+		if si >= 0:
+			sync_pieces[si] = to
 	# "持续一回合"效果在己方移动后清除(隐者隐身/皇后无敌/皇帝无敌)
 	_expire_one_turn_effects(turn)
 	# 记录该步执行后的棋盘(含被动技能效果),供复盘/悔棋还原
@@ -4798,14 +4803,16 @@ func _draw_overlay(db: Array) -> void:
 	# 月亮逆位:象免费落位(蓝色)
 	for t in free_elephant_targets:
 		draw_circle(_pos_px(t), 6.0, Color(0.35, 0.6, 1.0, 0.95))
-	# 皇帝:同归于尽标记(紫色框 = 反制)
+	# 皇帝:同归于尽标记(紫色框 = 反制,呼吸)
+	var br := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 1000.0 * 4.0)
+	var br_alpha := 0.7 + 0.3 * br
 	if not suicide_mark.is_empty():
 		var sp: Vector2i = suicide_mark["pos"]
-		draw_arc(_pos_px(sp), 25.0, 0, TAU, 32, Color(0.6, 0.25, 0.85, 0.95), 3.0)
-	# 教皇:象路径阻挡的己方棋子获得无敌(金色描边)
+		draw_arc(_pos_px(sp), 25.0 + br * 2.0, 0, TAU, 32, Color(0.6, 0.25, 0.85, br_alpha), 3.0)
+	# 教皇:象路径阻挡的己方棋子获得无敌(金色描边,呼吸)
 	for gpos in pope_guarded:
-		draw_arc(_pos_px(gpos), 27.0, 0, TAU, 40, Color(0.95, 0.8, 0.2, 0.95), 3.0)
-	# 无敌状态:皇后全员无敌 / 皇帝指定无敌 → 金色描边
+		draw_arc(_pos_px(gpos), 27.0 + br * 2.0, 0, TAU, 40, Color(0.95, 0.8, 0.2, br_alpha), 3.0)
+	# 无敌状态:皇后全员无敌 / 皇帝指定无敌 → 金色描边(呼吸)
 	if invincible_side >= 0 or invincible_piece.x >= 0:
 		for r in db.size():
 			for c in db[r].size():
@@ -4814,9 +4821,9 @@ func _draw_overlay(db: Array) -> void:
 					continue
 				var qpos := Vector2i(c, r)
 				if invincible_side == q["side"] or qpos == invincible_piece:
-					draw_arc(_pos_px(qpos), 27.0, 0, TAU, 40, Color(0.95, 0.8, 0.2, 0.95), 3.0)
-	# 反制状态:皇后全员反制 / 教皇逆位象反制 → 紫色描边
-	var purple := Color(0.6, 0.25, 0.85, 0.95)
+					draw_arc(_pos_px(qpos), 27.0 + br * 2.0, 0, TAU, 40, Color(0.95, 0.8, 0.2, br_alpha), 3.0)
+	# 反制状态:皇后全员反制 / 教皇逆位象反制 → 紫色描边(呼吸)
+	var purple := Color(0.6, 0.25, 0.85, br_alpha)
 	if counter_side >= 0:
 		for r in db.size():
 			for c in db[r].size():
@@ -4824,17 +4831,17 @@ func _draw_overlay(db: Array) -> void:
 				if q == null:
 					continue
 				if q["side"] == counter_side:
-					draw_arc(_pos_px(Vector2i(c, r)), 27.0, 0, TAU, 40, purple, 3.0)
+					draw_arc(_pos_px(Vector2i(c, r)), 27.0 + br * 2.0, 0, TAU, 40, purple, 3.0)
 	for s4 in 2:
 		if perks_of(s4).has("jiaohuang2"):
 			for r in db.size():
 				for c in db[r].size():
 					var q = db[r][c]
 					if q != null and q["side"] == s4 and q["type"] == R.Type.ELEPHANT:
-						draw_arc(_pos_px(Vector2i(c, r)), 27.0, 0, TAU, 40, purple, 3.0)
-	# 命运之轮(逆位):协同两子淡蓝色描边
+						draw_arc(_pos_px(Vector2i(c, r)), 27.0 + br * 2.0, 0, TAU, 40, purple, 3.0)
+	# 命运之轮(逆位):协同两子淡蓝色描边(呼吸)
 	for spos in sync_pieces:
-		draw_arc(_pos_px(spos), 29.0, 0, TAU, 40, Color(0.45, 0.8, 1.0, 0.95), 3.0)
+		draw_arc(_pos_px(spos), 29.0 + br * 2.0, 0, TAU, 40, Color(0.45, 0.8, 1.0, br_alpha), 3.0)
 	# 隐者:隐身棋子只保留半透明(棋子本体绘制),不画"隐"字与描边,避免暴露隐身位置
 
 
@@ -5042,14 +5049,16 @@ func _draw_overlay4() -> void:
 			draw_arc(_pos_px4(m), 14.0, 0, TAU, 24, Color(0.85, 0.3, 0.25), 2.5)
 		else:
 			draw_circle(_pos_px4(m), 4.0, Color(0.2, 0.7, 0.3, 0.9))
-	# 皇帝:同归于尽标记(紫色框 = 反制)
+	# 皇帝:同归于尽标记(紫色框 = 反制,呼吸)
+	var br4 := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 1000.0 * 4.0)
+	var br4_alpha := 0.7 + 0.3 * br4
 	if not suicide_mark4.is_empty():
 		var sp4: Vector2i = suicide_mark4["pos"]
-		draw_arc(_pos_px4(sp4), 16.0, 0, TAU, 24, Color(0.6, 0.25, 0.85, 0.95), 2.5)
-	# 教皇:象路径阻挡的己方棋子获得无敌(金色描边)
+		draw_arc(_pos_px4(sp4), 16.0 + br4 * 1.5, 0, TAU, 24, Color(0.6, 0.25, 0.85, br4_alpha), 2.5)
+	# 教皇:象路径阻挡的己方棋子获得无敌(金色描边,呼吸)
 	for gpos in pope_guarded4:
-		draw_arc(_pos_px4(gpos), 17.0, 0, TAU, 32, Color(0.95, 0.8, 0.2, 0.95), 2.5)
-	# 无敌状态:皇后全员无敌 / 皇帝指定无敌 → 金色描边
+		draw_arc(_pos_px4(gpos), 17.0 + br4 * 1.5, 0, TAU, 32, Color(0.95, 0.8, 0.2, br4_alpha), 2.5)
+	# 无敌状态:皇后全员无敌 / 皇帝指定无敌 → 金色描边(呼吸)
 	if invincible_side4 >= 0 or invincible_piece4.x >= 0:
 		for r in board.size():
 			for c in board[r].size():
@@ -5058,9 +5067,9 @@ func _draw_overlay4() -> void:
 					continue
 				var qpos := Vector2i(c, r)
 				if invincible_side4 == q["side"] or qpos == invincible_piece4:
-					draw_arc(_pos_px4(qpos), 17.0, 0, TAU, 32, Color(0.95, 0.8, 0.2, 0.95), 2.5)
-	# 反制状态:皇后全员反制 / 教皇逆位象反制 → 紫色描边
-	var purple4 := Color(0.6, 0.25, 0.85, 0.95)
+					draw_arc(_pos_px4(qpos), 17.0 + br4 * 1.5, 0, TAU, 32, Color(0.95, 0.8, 0.2, br4_alpha), 2.5)
+	# 反制状态:皇后全员反制 / 教皇逆位象反制 → 紫色描边(呼吸)
+	var purple4 := Color(0.6, 0.25, 0.85, br4_alpha)
 	if counter_side4 >= 0:
 		for r in board.size():
 			for c in board[r].size():
@@ -5068,17 +5077,17 @@ func _draw_overlay4() -> void:
 				if q == null:
 					continue
 				if q["side"] == counter_side4:
-					draw_arc(_pos_px4(Vector2i(c, r)), 17.0, 0, TAU, 32, purple4, 2.5)
+					draw_arc(_pos_px4(Vector2i(c, r)), 17.0 + br4 * 1.5, 0, TAU, 32, purple4, 2.5)
 	for s5 in 4:
 		if perks4[s5].has("jiaohuang2"):
 			for r in board.size():
 				for c in board[r].size():
 					var q = board[r][c]
 					if q != null and q["side"] == s5 and q["type"] == R.Type.ELEPHANT:
-						draw_arc(_pos_px4(Vector2i(c, r)), 17.0, 0, TAU, 32, purple4, 2.5)
-	# 命运之轮(逆位):协同两子淡蓝色描边
+						draw_arc(_pos_px4(Vector2i(c, r)), 17.0 + br4 * 1.5, 0, TAU, 32, purple4, 2.5)
+	# 命运之轮(逆位):协同两子淡蓝色描边(呼吸)
 	for spos4 in sync_pieces4:
-		draw_arc(_pos_px4(spos4), 18.0, 0, TAU, 32, Color(0.45, 0.8, 1.0, 0.95), 2.5)
+		draw_arc(_pos_px4(spos4), 18.0 + br4 * 1.5, 0, TAU, 32, Color(0.45, 0.8, 1.0, br4_alpha), 2.5)
 	# 星星:兵免费移兵落位(蓝色)
 	for t4 in free_retreat4_targets:
 		draw_circle(_pos_px4(t4), 4.0, Color(0.3, 0.55, 0.95, 0.95))
@@ -5391,10 +5400,15 @@ func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 					turn4 += 1
 				_begin_turn4()
 				return
-	# 命运之轮(进阶):协同棋子移动不消耗步数;星星免费移兵不消耗行动
+	# 命运之轮(进阶):协同棋子移动不消耗步数,协同位置跟随棋子移动;星星免费移兵不消耗行动
 	var is_free4: bool = kind == "free_retreat"
-	if not is_free4 and not from in sync_pieces4:
+	var was_sync4: bool = from in sync_pieces4
+	if not is_free4 and not was_sync4:
 		actions_left4 -= 1
+	elif not is_free4 and was_sync4:
+		var si4 := sync_pieces4.find(from)
+		if si4 >= 0:
+			sync_pieces4[si4] = to
 	# 星星免费移兵:正位标记每回合一次,逆位消耗 1 蓄势
 	if is_free4:
 		if perks4[side].has("xingxing"):

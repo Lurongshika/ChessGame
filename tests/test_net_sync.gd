@@ -189,6 +189,22 @@ func _run() -> void:
 	_check(scene.turn == R.Side.RED, "命运之轮逆位:释放后不跳过回合")
 	_check(scene.sync_pieces.size() == 2, "命运之轮逆位:两子进入协同状态")
 	_check(scene.actions_left == 1, "命运之轮逆位:不额外增加行动(仅协同)")
+	# 协同棋子移动后,协同位置跟随棋子(描边不再停留原地)
+	var sp0: Vector2i = scene.sync_pieces[0]
+	var sp_mv: Vector2i = sp0
+	# 找该协同子一个合法移动(空位)
+	var sp_moves: Array = R.legal_moves(scene.board, sp0, scene.perks_red, scene.perks_black)
+	var sp_target := Vector2i(-1, -1)
+	for mm in sp_moves:
+		if scene.board[mm.y][mm.x] == null:
+			sp_target = mm
+			break
+	if sp_target.x >= 0:
+		var actions_before_sync: int = scene.actions_left
+		scene._perform_move(sp0, sp_target)
+		_check(not sp0 in scene.sync_pieces, "协同:原位置描边移除")
+		_check(sp_target in scene.sync_pieces, "协同:描边跟随到新位置")
+		_check(scene.actions_left == actions_before_sync, "协同:移动不消耗行动")
 
 	# --- 世界:变子按价值加权(弱子概率高,强子概率低) ---
 	var rolls := {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0}  # PAWN..CANNON
