@@ -242,6 +242,27 @@ func _run() -> void:
 	_check(scene.invincible_side == R.Side.RED, "有充能:皇后释放成功")
 	_check(scene.queen_charge[R.Side.RED] == 0, "皇后释放后充能消耗")
 	_check(scene.turn == R.Side.BLACK, "皇后释放后消耗本回合")
+	# 皇后充能上限 1:连续被吃不超 1
+	scene._handle_capture({"side": R.Side.RED, "type": R.Type.PAWN, "pos": Vector2i(4, 7), "birth_pos": Vector2i(4, 7)}, Vector2i(4, 7), R.Side.BLACK)
+	scene._handle_capture({"side": R.Side.RED, "type": R.Type.ROOK, "pos": Vector2i(0, 7), "birth_pos": Vector2i(0, 7)}, Vector2i(0, 7), R.Side.BLACK)
+	_check(scene.queen_charge[R.Side.RED] == 1, "皇后充能上限 1:被吃 2 子仍为 1")
+	# 皇后无敌持续 2 回合:释放后己方移动 2 次才消失
+	scene.queen_charge[R.Side.RED] = 1
+	scene.turn = R.Side.RED
+	scene.actions_left = 1
+	scene.invincible_side_turns = 0
+	scene._skill_queen("huanghou", R.Side.RED)
+	_check(scene.invincible_side == R.Side.RED and scene.invincible_side_turns == 2, "皇后无敌:持续 2 回合")
+	# 皇帝无敌持续 3 回合
+	scene.perks_red = {"huangdi": true}
+	scene._setup_board()
+	scene.turn = R.Side.RED
+	scene.actions_left = 1
+	scene.invincible_piece_turns = 0
+	scene._handle_king_guard(Vector2i(4, 9), R.Side.RED)  # 红帅
+	_check(scene.invincible_piece == Vector2i(4, 9) and scene.invincible_piece_turns == 3, "皇帝无敌:持续 3 回合")
+	# 皇帝冷却 2 回合(tip 解析)
+	_check(scene._skill_cd_value("huangdi") == 2, "皇帝冷却 2 回合")
 
 	# --- 审判逆位:敌方吃我方棋子时,纯规则(无技能)吃不到则禁止 ---
 	scene.net_role = "host"
