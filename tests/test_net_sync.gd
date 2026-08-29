@@ -205,6 +205,10 @@ func _run() -> void:
 		_check(not sp0 in scene.sync_pieces, "协同:原位置描边移除")
 		_check(sp_target in scene.sync_pieces, "协同:描边跟随到新位置")
 		_check(scene.actions_left == actions_before_sync, "协同:移动不消耗行动")
+		# 协同棋子本回合只能免费移动一次:移动后再次选择被拦截(防无限移动)
+		scene._select(sp_target)
+		_check(scene.selected == Vector2i(-1, -1) or scene.selected != sp_target, "协同:已移动的协同子本回合不能再选")
+		_check(sp_target in scene._sync_moved, "协同:移动记录到 _sync_moved")
 
 	# --- 世界:变子按价值加权(弱子概率高,强子概率低) ---
 	var rolls := {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0}  # PAWN..CANNON

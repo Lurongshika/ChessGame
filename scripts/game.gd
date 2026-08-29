@@ -60,7 +60,8 @@ var invincible_piece := Vector2i(-1, -1)  # 皇帝:指定无敌的己方棋子
 var invincible_piece_side := -1    # 皇帝:无敌棋子所属方(用于"己方移动后清除")
 var counter_side := -1          # 皇后(进阶):反制方(该方棋子被吃时同归于尽)
 var siwang_charge := {0: 0, 1: 0}  # 死亡:被吃充能(己方每被吃 1 子 +1)
-var sync_pieces: Array = []     # 命运之轮(进阶):协同棋子(移动不消耗步数)
+var sync_pieces: Array = []     # 命运之轮(进阶):协同棋子(移动不消耗步数,每子每回合一次)
+var _sync_moved: Array[Vector2i] = []  # 命运之轮(进阶):本回合已免费移动过的协同棋子(防无限移动)
 var star2_charge := {0: 0, 1: 0}  # 星星逆位:蓄势(每蓄势可免费移动一个兵)
 var controlled_turns := 0       # 倒吊人:控制权剩余回合数
 var controlled_all_turns := 0   # 倒吊人逆位:全棋子控制剩余回合数(释放后跳过本回合,下回合起生效)
@@ -96,6 +97,7 @@ var counter_side4 := -1
 var siwang_charge4 := {0: 0, 1: 0, 2: 0, 3: 0}
 var star2_charge4 := {0: 0, 1: 0, 2: 0, 3: 0}  # 四人:星星逆位蓄势
 var sync_pieces4: Array = []
+var _sync_moved4: Array[Vector2i] = []  # 四人:协同棋子本回合已免费移动(每回合一次,防无限移动)
 var controlled_turns4 := 0
 var controlled_all_turns4 := 0   # 四人:倒吊人逆位全棋子控制剩余回合数
 var controlled_all_owner4 := -1  # 四人:全棋子控制权归属方
@@ -2293,6 +2295,9 @@ func _validate_move(from: Vector2i, to: Vector2i, kind: String, side: int) -> bo
 	# 全控制:每子每回合只能移动一次
 	if all_control and p["side"] != side and from in _controlled_moved:
 		return false
+	# 协同棋子:本回合已免费移动过一次的不能再移动(防无限移动,host 权威校验)
+	if from in _sync_moved:
+		return false
 	if kind == "move":
 		var in_legal: bool = to in R.legal_moves(board, from, perks_red, perks_black)
 		# 战车(被动·整局):与车相邻的棋子可落至车的可落位;选中车时可落至相邻子(含敌方)的可落位
@@ -2846,6 +2851,7 @@ func _begin_turn() -> void:
 	hermit_pending = false
 	# 注:隐者隐身/皇后无敌/皇帝无敌/皇后逆位反制等"持续一回合"效果,改为己方移动后清除(见 _perform_move)
 	sync_pieces = []
+	_sync_moved = []
 	# 倒吊人逆位:全控制回合递减(在控制方回合开始减,生效 3 个己方回合)
 	if controlled_all_turns > 0 and controlled_all_owner == turn:
 		controlled_all_turns -= 1
@@ -3085,7 +3091,7 @@ func _perform_move(from: Vector2i, to: Vector2i) -> void:
 			return
 	# first_moved 记录棋子移动后的新位置,用于"额外回合不能连移同子"检查
 	first_moved = to
-	# 命运之轮(进阶):协同棋子移动不消耗步数;协同位置跟随棋子移动
+	# 命运之轮(进阶):协同棋子移动不消耗步数;协同位置跟随棋子移动;记录已免费移动(每回合一次)
 	var was_sync: bool = from in sync_pieces
 	if not was_sync:
 		actions_left -= 1
@@ -3093,6 +3099,7 @@ func _perform_move(from: Vector2i, to: Vector2i) -> void:
 		var si := sync_pieces.find(from)
 		if si >= 0:
 			sync_pieces[si] = to
+			_sync_moved.append(to)
 	# "持续一回合"效果在己方移动后清除(隐者隐身/皇后无敌/皇帝无敌)
 	_expire_one_turn_effects(turn)
 	# 记录该步执行后的棋盘(含被动技能效果),供复盘/悔棋还原
@@ -4548,6 +4555,9 @@ func _select(pos: Vector2i) -> void:
 	# 额外行动(命运之轮):本回合已移动过的棋子不能再次移动
 	if first_moved.x >= 0 and pos == first_moved:
 		return
+	# 协同棋子:本回合已免费移动过一次的不能再移动(防无限移动)
+	if pos in _sync_moved:
+		return
 	selected = pos
 	moves_cache = R.legal_moves(board, pos, perks_red, perks_black)
 	# 隐者:隐身的子不能吃子(只能移动)
@@ -5186,6 +5196,9 @@ func current_side4() -> int:
 
 
 func _select4(pos: Vector2i) -> void:
+	# 协同棋子:本回合已免费移动过一次的不能再移动(防无限移动)
+	if pos in _sync_moved4:
+		return
 	# 走法复用 chess_rules.raw_moves4(参数化支持 4 方方向/九宫/河界 + 技能)
 	selected4 = pos
 	var perks_arr: Array = [perks4[0], perks4[1], perks4[2], perks4[3]]
@@ -5320,6 +5333,9 @@ func _try_move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 				return
 			on_move4.rpc(from, to, kind)
 			return
+		# 协同棋子:本回合已免费移动过一次的不能再移动(防无限移动,host 权威校验)
+		if from in _sync_moved4:
+			return
 		if not in_legal4:
 			return
 		# 全控制:每子每回合限移一次,不能吃子
@@ -5449,6 +5465,7 @@ func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 		var si4 := sync_pieces4.find(from)
 		if si4 >= 0:
 			sync_pieces4[si4] = to
+			_sync_moved4.append(to)
 	# 星星免费移兵:正位标记每回合一次,逆位消耗 1 蓄势
 	if is_free4:
 		if perks4[side].has("xingxing"):
@@ -5792,6 +5809,7 @@ func _begin_turn4() -> void:
 		_apply_dice4(side, _next_alive4(side))
 	# 注:隐者隐身/皇后无敌/皇帝无敌/皇后逆位反制等"持续一回合"效果,改为己方移动后清除(见 _move4)
 	sync_pieces4 = []
+	_sync_moved4 = []
 	hermit_active4 = hermit_pending4
 	hermit_pending4 = false
 	# 倒吊人逆位:全控制回合递减(在控制方回合开始减)
@@ -6118,6 +6136,9 @@ func request_move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 		return
 	var p = board[from.y][from.x]
 	if p == null or p["side"] != side:
+		return
+	# 协同棋子:本回合已免费移动过一次的不能再移动(防无限移动)
+	if from in _sync_moved4:
 		return
 	# 走法校验
 	var perks_arr: Array = [perks4[0], perks4[1], perks4[2], perks4[3]]
