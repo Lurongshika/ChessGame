@@ -411,6 +411,8 @@ func _run() -> void:
 	scene.perks_black = {}
 	scene._setup_board()
 	scene.board[8][3] = R.make_piece(R.Side.RED, R.Type.ADVISOR)  # 红仕在 (3,8) = 红相(2,9)的象眼
+	scene.pope_guarded = {}
+	scene.pope_countered = {}
 	scene._refresh_pope_guard(R.Side.RED)
 	_check(scene.pope_guarded.has(Vector2i(3, 8)), "教皇:象眼处己方棋子获得无敌标记")
 	scene.board[0][3] = R.make_piece(R.Side.BLACK, R.Type.ROOK)  # 黑車 (3,0) 同列可直吃
@@ -426,6 +428,8 @@ func _run() -> void:
 	# 红象在 (2,9) 与 (6,9);放一个己方红兵在 (3,8)(5×5 内)与一个红兵在 (0,3)(范围外)
 	scene.board[8][3] = R.make_piece(R.Side.RED, R.Type.PAWN)
 	scene.board[3][0] = R.make_piece(R.Side.RED, R.Type.PAWN)
+	scene.pope_guarded = {}
+	scene.pope_countered = {}
 	scene._refresh_pope_guard(R.Side.RED)
 	# 红象(2,9)自身不获得无敌
 	var eleph_self := Vector2i(2, 9)
@@ -434,11 +438,15 @@ func _run() -> void:
 	_check(not scene.pope_guarded.has(Vector2i(0, 3)), "教皇正位:范围外己方棋子不获得无敌")
 	# 范围内敌方棋子不会因正位获得无敌
 	scene.board[7][3] = R.make_piece(R.Side.BLACK, R.Type.PAWN)  # (3,7):红象(2,9)的5×5内
+	scene.pope_guarded = {}
+	scene.pope_countered = {}
 	scene._refresh_pope_guard(R.Side.RED)
 	_check(not scene.pope_guarded.has(Vector2i(3, 7)), "教皇正位:范围内敌方棋子不获得无敌")
 
 	# --- 教皇逆位 5×5 范围:象自身+范围内所有子(含敌方)都获得反制 ---
 	scene.perks_red = {"jiaohuang2": true}
+	scene.pope_guarded = {}
+	scene.pope_countered = {}
 	scene._refresh_pope_guard(R.Side.RED)
 	_check(scene.pope_countered.has(eleph_self), "教皇逆位:象自身获得反制")
 	_check(scene.pope_countered.has(Vector2i(3, 8)), "教皇逆位:范围内己方棋子获得反制")
@@ -450,6 +458,29 @@ func _run() -> void:
 	# 记录 _handle_capture 后该格与攻击者同归于尽
 	scene._handle_capture(scene.board[8][3], Vector2i(3, 8), R.Side.BLACK)
 	_check(scene.board[8][3] == null, "教皇逆位:被吃反制子与攻击者同归于尽(该格清空)")
+
+	# --- 教皇修复:双方效果同时保留(不只当前回合方),象可被吃(不互保) ---
+	scene.net_role = "local"
+	scene.phase = scene.Phase.PLAY
+	scene.perks_red = {"jiaohuang": true}
+	scene.perks_black = {"jiaohuang": true}
+	scene._setup_board()
+	# 双方象附近各放一子:红兵(3,8)在红象(2,9)5×5内,黑兵(3,1)在黑象(2,0)5×5内
+	scene.board[8][3] = R.make_piece(R.Side.RED, R.Type.PAWN)
+	scene.board[1][3] = R.make_piece(R.Side.BLACK, R.Type.PAWN)
+	# 模拟"轮到黑方"时刷新:双方效果都应存在(旧 bug 只保留一方)
+	scene.turn = R.Side.BLACK
+	scene._refresh_pope_guard_all()
+	_check(scene.pope_guarded.has(Vector2i(3, 8)), "教皇修复:轮到黑方时红方象保护仍生效")
+	_check(scene.pope_guarded.has(Vector2i(3, 1)), "教皇修复:轮到黑方时黑方象保护生效")
+	# 象不互保:红象(2,9)自身不被标记
+	_check(not scene.pope_guarded.has(Vector2i(2, 9)), "教皇修复:象自身不获得无敌")
+	# 另一只象落在该象5×5内也不被保护(象可被吃):放红象在 (3,8)(距 (2,9) 的 dx=1,dy=-1)
+	scene.board[8][3] = R.make_piece(R.Side.RED, R.Type.ELEPHANT)
+	scene.pope_guarded = {}
+	scene.pope_countered = {}
+	scene._refresh_pope_guard_all()
+	_check(not scene.pope_guarded.has(Vector2i(3, 8)), "教皇修复:另一只象落在5×5内也不被保护(象可被吃)")
 
 	# --- 对局记录同步:敌我双方技能都随状态广播 ---
 	scene.net_role = "host"
@@ -558,6 +589,8 @@ func _run() -> void:
 	scene.actions_left = 1
 	scene.perks_red = {"zhanche": true}
 	scene.perks_black = {}
+	scene.pope_guarded = {}
+	scene.pope_countered = {}
 	scene.board = []
 	for rr in R.ROWS:
 		var row := []

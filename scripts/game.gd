@@ -3372,9 +3372,8 @@ func _begin_turn() -> void:
 		return
 	# 审判:每回合随机禁用敌方一个主动技能
 	_refresh_judgement(turn)
-	# 教皇:刷新象路径阻挡的己方棋子无敌标记
-	_refresh_pope_guard(turn)
-	_refresh_pope_guard(1 - turn)
+	# 教皇:刷新双方象 5×5 无敌/反制标记(整局生效,不只当前回合方)
+	_refresh_pope_guard_all()
 	actions_left = _turn_action_cap()
 	if extra_turn[turn]:
 		extra_turn[turn] = false
@@ -3433,9 +3432,8 @@ func _clear_all_hidden() -> void:
 
 
 # 教皇:以象为中心的 5×5 范围内棋子获得无敌/反制(正位除象自身,逆位含象自身)
+# 注意:本函数只累加 side 方的效果,不清空 dict(调用方应先 _refresh_pope_guard_all)
 func _refresh_pope_guard(side: int) -> void:
-	pope_guarded.clear()
-	pope_countered.clear()
 	var has_pope: bool = perks_of(side).has("jiaohuang")
 	var has_pope2: bool = perks_of(side).has("jiaohuang2")
 	if not has_pope and not has_pope2:
@@ -3460,10 +3458,19 @@ func _refresh_pope_guard(side: int) -> void:
 						continue
 					if gp == null:
 						continue
-					if has_pope and gp["side"] == side:
-						pope_guarded[gpos] = true  # 正位:范围内己方棋子无敌
+					# 正位:范围内己方棋子无敌(排除象自身及其他象,避免象互保无法被吃)
+					if has_pope and gp["side"] == side and gp["type"] != R.Type.ELEPHANT:
+						pope_guarded[gpos] = true
 					if has_pope2:
 						pope_countered[gpos] = true  # 逆位:范围内任意子反制(含敌方)
+
+
+# 刷新双方教皇效果(先清空再累加,避免多次调用互相覆盖)
+func _refresh_pope_guard_all() -> void:
+	pope_guarded.clear()
+	pope_countered.clear()
+	_refresh_pope_guard(R.Side.RED)
+	_refresh_pope_guard(R.Side.BLACK)
 
 
 # 审判:每回合随机禁用敌方一个主动技能
@@ -3633,8 +3640,7 @@ func _perform_move(from: Vector2i, to: Vector2i) -> void:
 		_update_ui()
 		_maybe_ai()
 	_auto_save()
-	_refresh_pope_guard(R.Side.RED)
-	_refresh_pope_guard(R.Side.BLACK)
+	_refresh_pope_guard_all()
 	if net_role == "host":
 		_broadcast_state()
 
@@ -6102,8 +6108,7 @@ func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 		_end_turn4()
 	else:
 		_update_status4()
-	_refresh_pope_guard4(side)
-	_refresh_pope_guard4(_next_alive4(side))
+	_refresh_pope_guard_all4()
 	_refresh_check4()
 	_update_progress4()
 	# 占领模式:走子后检查中心占领
@@ -6482,7 +6487,7 @@ func _begin_turn4() -> void:
 		_end_turn4()
 		return
 	_refresh_judgement4(side)
-	_refresh_pope_guard4(side)
+	_refresh_pope_guard_all4()
 	actions_left4 = _turn_action_cap4()
 	if extra_turn4[side]:
 		extra_turn4[side] = false
@@ -6604,8 +6609,6 @@ func _refresh_judgement4(side: int) -> void:
 
 
 func _refresh_pope_guard4(side: int) -> void:
-	pope_guarded4.clear()
-	pope_countered4.clear()
 	var has_pope4: bool = perks4[side].has("jiaohuang")
 	var has_pope24: bool = perks4[side].has("jiaohuang2")
 	if not has_pope4 and not has_pope24:
@@ -6630,10 +6633,20 @@ func _refresh_pope_guard4(side: int) -> void:
 						continue
 					if gp == null:
 						continue
-					if has_pope4 and gp["side"] == side:
-						pope_guarded4[gpos] = true  # 正位:范围内己方棋子无敌
+					# 正位:范围内己方棋子无敌(排除象自身及其他象,避免象互保无法被吃)
+					if has_pope4 and gp["side"] == side and gp["type"] != R.Type.ELEPHANT:
+						pope_guarded4[gpos] = true
 					if has_pope24:
 						pope_countered4[gpos] = true  # 逆位:范围内任意子反制(含敌方)
+
+
+# 刷新所有存活方教皇效果(先清空再累加,避免多次调用互相覆盖)
+func _refresh_pope_guard_all4() -> void:
+	pope_guarded4.clear()
+	pope_countered4.clear()
+	for s in 4:
+		if alive4[s]:
+			_refresh_pope_guard4(s)
 
 
 # ==================== 联机四人:主机权威状态同步(复制双人逻辑,4 方版) ====================

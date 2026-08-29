@@ -87,12 +87,16 @@ func _run() -> void:
 	game.board[1][1] = R.make_piece(R.Side.RED, R.Type.PAWN)
 	game.board[7][7] = R.make_piece(R.Side.BLUE, R.Type.PAWN)
 	game.perks4 = {0: {"jiaohuang": true}, 1: {}, 2: {}, 3: {}}
+	game.pope_guarded4 = {}
+	game.pope_countered4 = {}
 	game._refresh_pope_guard4(R.Side.RED)
 	_check(not game.pope_guarded4.has(Vector2i(8, 8)), "四人教皇正位:象自身不获得无敌")
 	_check(game.pope_guarded4.has(Vector2i(9, 9)), "四人教皇正位:5×5内己方棋子无敌")
 	_check(not game.pope_guarded4.has(Vector2i(1, 1)), "四人教皇正位:范围外己方棋子不无敌")
 	_check(not game.pope_guarded4.has(Vector2i(7, 7)), "四人教皇正位:范围内敌方棋子不无敌")
 	game.perks4 = {0: {"jiaohuang2": true}, 1: {}, 2: {}, 3: {}}
+	game.pope_guarded4 = {}
+	game.pope_countered4 = {}
 	game._refresh_pope_guard4(R.Side.RED)
 	_check(game.pope_countered4.has(Vector2i(8, 8)), "四人教皇逆位:象自身获得反制")
 	_check(game.pope_countered4.has(Vector2i(9, 9)), "四人教皇逆位:5×5内己方棋子反制")
@@ -100,6 +104,8 @@ func _run() -> void:
 	_check(not game.pope_countered4.has(Vector2i(1, 1)), "四人教皇逆位:范围外棋子不反制")
 	# 序列化往返:pope_countered4 随状态保留
 	game.perks4 = {0: {"jiaohuang2": true}, 1: {}, 2: {}, 3: {}}
+	game.pope_guarded4 = {}
+	game.pope_countered4 = {}
 	game._refresh_pope_guard4(R.Side.RED)
 	var pd = game._state_to_data4()
 	_check(pd.has("pope_countered4") and pd["pope_countered4"].size() > 0, "四人:状态广播含教皇逆位反制")
