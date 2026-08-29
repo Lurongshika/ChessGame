@@ -24,6 +24,32 @@ const COLORS16 := [
 ]
 
 
+# --- CRT 后处理(全局,参考 CrtTypewriter) ---
+var _crt_layer: CanvasLayer
+var _crt_rect: ColorRect
+
+
+func _setup_crt() -> void:
+	# CRT 全屏后处理层(layer 99,在过渡层 100 之下)
+	_crt_layer = CanvasLayer.new()
+	_crt_layer.layer = 99
+	add_child(_crt_layer)
+	_crt_rect = ColorRect.new()
+	_crt_rect.color = Color(1, 1, 1, 1)
+	_crt_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_crt_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var mat := ShaderMaterial.new()
+	mat.shader = load("res://shaders/crt.gdshader")
+	_crt_rect.material = mat
+	_crt_layer.add_child(_crt_rect)
+
+
+# 开关 CRT 效果(默认开)
+func set_crt_enabled(enabled: bool) -> void:
+	if _crt_rect != null:
+		_crt_rect.visible = enabled
+
+
 # --- 场景过渡(淡入淡出) ---
 var _fade_layer: CanvasLayer
 var _fade_rect: ColorRect
@@ -35,6 +61,8 @@ var _switching := false
 
 
 func _ready() -> void:
+	# CRT 后处理层(全屏,参考 CrtTypewriter 效果)
+	_setup_crt()
 	# 过渡层(最高层,常驻)
 	_fade_layer = CanvasLayer.new()
 	_fade_layer.layer = 100
