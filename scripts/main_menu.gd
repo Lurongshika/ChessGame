@@ -35,10 +35,15 @@ func _ready() -> void:
 	add_child(btn4)
 	menu_btns.append(btn4)
 
-	var btn5 := _button("退出游戏", Vector2(540, 520))
-	btn5.pressed.connect(func(): get_tree().quit())
+	var btn5 := _button("设置", Vector2(540, 520))
+	btn5.pressed.connect(_show_settings)
 	add_child(btn5)
 	menu_btns.append(btn5)
+
+	var btn6 := _button("退出游戏", Vector2(540, 590))
+	btn6.pressed.connect(func(): get_tree().quit())
+	add_child(btn6)
+	menu_btns.append(btn6)
 
 	_build_user_button()
 	Global.animate_ui_in(self)
@@ -167,6 +172,76 @@ func _show_net_join() -> void:
 	_add_option_button("返回", Vector2(540, 440), _show_net_options)
 
 
+# 设置:CRT 效果强度 / 红蓝偏移(实时生效并保存)
+func _show_settings() -> void:
+	if opt_root != null:
+		opt_root.queue_free()
+	_set_menu_visible(false)
+	opt_root = _make_option_layer()
+	var title := _label("设置", 26, Color(0.95, 0.85, 0.6))
+	title.position = Vector2(0, 200)
+	title.size = Vector2(1280, 34)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	opt_root.add_child(title)
+
+	# CRT 效果强度(0-100 → 0.0-1.0)
+	var st_label := _label("CRT 效果强度", 17, Color(0.85, 0.82, 0.75))
+	st_label.position = Vector2(350, 280)
+	st_label.size = Vector2(180, 34)
+	opt_root.add_child(st_label)
+	var st_slider := HSlider.new()
+	st_slider.min_value = 0
+	st_slider.max_value = 100
+	st_slider.step = 1
+	st_slider.value = Global.crt_strength * 100.0
+	st_slider.position = Vector2(550, 282)
+	st_slider.size = Vector2(280, 30)
+	st_slider.add_theme_font_override("font", _font())
+	opt_root.add_child(st_slider)
+	var st_val := _label("%d%%" % int(Global.crt_strength * 100.0), 17, Color(1.0, 0.9, 0.3))
+	st_val.position = Vector2(850, 280)
+	st_val.size = Vector2(90, 34)
+	opt_root.add_child(st_val)
+	st_slider.value_changed.connect(func(v: float):
+		Global.set_crt_strength(v / 100.0)
+		st_val.text = "%d%%" % int(v)
+	)
+
+	# 红蓝偏移(0-100 → 0.0-0.01)
+	var ab_label := _label("红蓝偏移", 17, Color(0.85, 0.82, 0.75))
+	ab_label.position = Vector2(350, 350)
+	ab_label.size = Vector2(180, 34)
+	opt_root.add_child(ab_label)
+	var ab_slider := HSlider.new()
+	ab_slider.min_value = 0
+	ab_slider.max_value = 100
+	ab_slider.step = 1
+	ab_slider.value = Global.crt_aberration / 0.01 * 100.0
+	ab_slider.position = Vector2(550, 352)
+	ab_slider.size = Vector2(280, 30)
+	ab_slider.add_theme_font_override("font", _font())
+	opt_root.add_child(ab_slider)
+	var ab_val := _label("%.4f" % Global.crt_aberration, 17, Color(1.0, 0.9, 0.3))
+	ab_val.position = Vector2(850, 350)
+	ab_val.size = Vector2(90, 34)
+	opt_root.add_child(ab_val)
+	ab_slider.value_changed.connect(func(v: float):
+		var ab := v / 100.0 * 0.01
+		Global.set_crt_aberration(ab)
+		ab_val.text = "%.4f" % ab
+	)
+
+	# 实时预览提示
+	var tip := _label("调整即时生效并自动保存", 13, Color(0.6, 0.58, 0.52))
+	tip.position = Vector2(0, 420)
+	tip.size = Vector2(1280, 24)
+	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	opt_root.add_child(tip)
+
+	_animate_opt_extra_buttons([])
+	_add_option_button("返回", Vector2(540, 490), _close_options)
+
+
 var net_mode := "skill"
 var net_mode_btns: Array = []
 var net_players := 2
@@ -255,9 +330,9 @@ func _animate_option_button(b: Button) -> void:
 func _animate_opt_extra_buttons(btns: Array) -> void:
 	for b in btns:
 		_animate_option_button(b)
-	# 输入框淡入
+	# 输入框/滑块淡入
 	for child in opt_root.get_children():
-		if child is LineEdit:
+		if child is LineEdit or child is HSlider:
 			child.modulate.a = 0.0
 			var tw := create_tween()
 			tw.tween_interval(0.1)

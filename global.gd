@@ -15,6 +15,11 @@ var lobby_players := {}     # 对局:side -> {name, avatar_data, color} 四方�
 var game_rules := {}        # 自定义对局规则(大厅选项): win_mode/king_down/promotion/kill_count
 var from_lobby := false     # 是否从等候大厅进入对局(复用大厅连接)
 
+# 设置(用户可调,持久化到 user://settings.json)
+const SETTINGS_PATH := "user://settings.json"
+var crt_strength := 1.0     # CRT 效果强度(0.0-1.0)
+var crt_aberration := 0.0   # CRT 红蓝偏移(色差,0.0-0.01)
+
 # 16 种棋子颜色预设(大厅选色板与对局棋子共用)
 # 8 种颜色:红蓝绿紫粉青黑橙(黑=黑方棋子色,用于玩家区分)
 const COLORS16 := [
@@ -151,12 +156,65 @@ func _setup_crt() -> void:
 	mat.shader = load("res://shaders/crt.gdshader")
 	_crt_rect.material = mat
 	_crt_layer.add_child(_crt_rect)
+	# 应用已保存的 CRT 设置
+	_apply_crt_params()
 
 
 # 开关 CRT 效果(默认开)
 func set_crt_enabled(enabled: bool) -> void:
 	if _crt_rect != null:
 		_crt_rect.visible = enabled
+
+
+# 应用 CRT 强度/色差到 shader
+func _apply_crt_params() -> void:
+	if _crt_rect == null or not (_crt_rect.material is ShaderMaterial):
+		return
+	var mat := _crt_rect.material as ShaderMaterial
+	mat.set_shader_parameter("strength", crt_strength)
+	mat.set_shader_parameter("aberration", crt_aberration)
+
+
+# 设置 CRT 效果强度(0.0-1.0),保存到本地设置
+func set_crt_strength(v: float) -> void:
+	crt_strength = clampf(v, 0.0, 1.0)
+	_apply_crt_params()
+	_save_settings()
+
+
+# 设置 CRT 红蓝偏移(0.0-0.01),保存到本地设置
+func set_crt_aberration(v: float) -> void:
+	crt_aberration = clampf(v, 0.0, 0.01)
+	_apply_crt_params()
+	_save_settings()
+
+
+# 从 user://settings.json 加载设置
+func _load_settings() -> void:
+	if not FileAccess.file_exists(SETTINGS_PATH):
+		return
+	var f := FileAccess.open(SETTINGS_PATH, FileAccess.READ)
+	if f == null:
+		return
+	var data: Variant = JSON.parse_string(f.get_as_text())
+	if not (data is Dictionary):
+		return
+	if data.has("crt_strength"):
+		crt_strength = clampf(float(data["crt_strength"]), 0.0, 1.0)
+	if data.has("crt_aberration"):
+		crt_aberration = clampf(float(data["crt_aberration"]), 0.0, 0.01)
+
+
+# 保存设置到 user://settings.json
+func _save_settings() -> void:
+	var f := FileAccess.open(SETTINGS_PATH, FileAccess.WRITE)
+	if f == null:
+		return
+	f.store_string(JSON.stringify({
+		"crt_strength": crt_strength,
+		"crt_aberration": crt_aberration,
+	}))
+	f.close()
 
 
 # --- 场景过渡(淡入淡出) ---
@@ -171,6 +229,8 @@ var _switching := false
 
 func _ready() -> void:
 	_setup_audio()
+	# 加载用户设置(CRT 等)
+	_load_settings()
 	# CRT 后处理层(全屏,参考 CrtTypewriter 效果)
 	_setup_crt()
 	# 过渡层(最高层,常驻)
@@ -187,6 +247,8 @@ func _ready() -> void:
 	# 开局淡入(从黑到透明)
 	_fade_alpha = 1.0
 	_fade_target = 0.0
+	# 解析命令行参数(自动化测试用)
+	_parse_cmdline_args()
 
 
 func _process(delta: float) -> void:
@@ -214,7 +276,8 @@ func change_scene_with_fade(path: String) -> void:
 	_fade_target = 1.0
 
 
-# 支持命令行参数启动(用于自动化测试):--net=host/client --ip=192.168.x.x --port=7777 --mode=pvp/ai --slot=1 --pool=normal/advanced
+# 解析命令行参数(用于自动化测试):--net=host/client --ip=192.168.x.x --port=7777 --mode=pvp/ai --slot=1 --pool=normal/advanced
+func _parse_cmdline_args() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--net="):
 			net_role = arg.trim_prefix("--net=")

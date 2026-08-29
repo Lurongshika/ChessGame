@@ -9,6 +9,7 @@ uniform float curve_val : hint_range(1.0, 20.0) = 12.0;
 uniform float aberration : hint_range(0.0, 0.01) = 0.0;
 uniform float blur_size : hint_range(0.0, 0.01) = 0.0015;
 uniform float brightness : hint_range(0.8, 1.6) = 1.15;
+uniform float strength : hint_range(0.0, 1.0) = 1.0;
 
 // 屏幕弯曲:边缘向内凹陷
 vec2 curve(vec2 uv) {
@@ -61,10 +62,15 @@ void fragment() {
 	vec2 uv = UV;
 	vec2 crt_uv = curve(uv);
 
+	// 原始画面(无效果)
+	vec3 raw = texture(screen_texture, uv).rgb;
+	vec3 eff;
 	// 弯曲后超出屏幕:回退到原始 UV(边缘不裁切,仅中部弯曲)
 	if (crt_uv.x < 0.0 || crt_uv.x > 1.0 || crt_uv.y < 0.0 || crt_uv.y > 1.0) {
-		COLOR = vec4(crt_color(uv), 1.0);
+		eff = crt_color(uv);
 	} else {
-		COLOR = vec4(crt_color(crt_uv), 1.0);
+		eff = crt_color(crt_uv);
 	}
+	// 效果强度:0 = 完全关闭 CRT,1 = 完全应用
+	COLOR = vec4(mix(raw, eff, strength), 1.0);
 }
