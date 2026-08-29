@@ -120,16 +120,17 @@ func _ready() -> void:
 	chat.setup(_font(), _send_chat)
 	add_child(chat)
 
-	# 聊天框上方:自定义选项按钮
-	var opts_btn := _make_button("自定义选项", Vector2(20, 720 - 40 - 240 - 50), Vector2(150, 42))
-	opts_btn.pressed.connect(func():
-		if custom_opts == null:
-			custom_opts = CustomOptions.new()
-			custom_opts.setup(_font(), func(_r): pass)
-			add_child(custom_opts)
-		custom_opts.visible = true
-	)
-	add_child(opts_btn)
+	# 聊天框上方:自定义选项按钮(仅房主可更改规则)
+	if Global.net_role == "host":
+		var opts_btn := _make_button("自定义选项", Vector2(20, 720 - 40 - 240 - 50), Vector2(150, 42))
+		opts_btn.pressed.connect(func():
+			if custom_opts == null:
+				custom_opts = CustomOptions.new()
+				custom_opts.setup(_font(), func(_r): pass)
+				add_child(custom_opts)
+			custom_opts.visible = true
+		)
+		add_child(opts_btn)
 	_net_init()
 	Global.animate_ui_in(self)
 

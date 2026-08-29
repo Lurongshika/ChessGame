@@ -598,6 +598,9 @@ func _refresh_perk_panels4() -> void:
 			box.add_child(l)
 			continue
 		for id in perks4[side]:
+			# 跳过内部标记键(正义逆位的炮隔子标记不是真实技能)
+			if str(id).begins_with("_"):
+				continue
 			var info: Dictionary = perks_data[id]
 			var tip: String = info.get("tip", "")
 			if id == "huanghou":
@@ -3636,6 +3639,9 @@ func _add_perk_cards(box: VBoxContainer, side_id: int, is_self: bool) -> void:
 		box.add_child(l)
 		return
 	for id in perks_of(side_id):
+		# 跳过内部标记键(正义逆位的炮隔子标记不是真实技能)
+		if str(id).begins_with("_"):
+			continue
 		var info: Dictionary = perks_data[id]
 		var tip: String = info.get("tip", "")
 		# 皇后:tip 上显示当前充能(被吃 1 子 +1,上限 3)
