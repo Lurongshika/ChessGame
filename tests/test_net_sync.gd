@@ -336,6 +336,52 @@ func _run() -> void:
 	scene._apply_state_data4(data4_sync)
 	_check(scene._record4_history.size() == 2, "四人:客户端收到广播后含双方技能记录")
 
+	# --- 逆位魔术师:敌方将/帅不可被交换 ---
+	scene.net_role = "host"
+	scene.phase = scene.Phase.PLAY
+	scene.perks_red = {}
+	scene.perks_black = {"moshushi2": true}
+	scene._setup_board()
+	# 双人:host 权威执行 _apply_net_skill(moshushi2) 校验 —— 红帅(4,9)不可交换
+	scene.turn = R.Side.BLACK
+	scene.actions_left = 1
+	var king_pos := Vector2i(4, 9)   # 红帅(黑方逆位魔术师的敌方将)
+	var pawn_pos := Vector2i(0, 6)   # 红兵(敌方普通子)
+	var b_swap = scene._board_to_json(scene.board)
+	scene._apply_net_skill("moshushi2", {"a": [king_pos.x, king_pos.y], "b": [pawn_pos.x, pawn_pos.y]})
+	_check(scene._board_to_json(scene.board) == b_swap, "双人:逆位魔术师 host 校验拒绝交换敌方将/帅")
+	# 双人:本地选目标 _handle_swap_target 拒绝将/帅
+	scene.net_role = "local"
+	scene.perks_black = {"moshushi2": true}
+	scene.turn = R.Side.BLACK
+	scene.actions_left = 1
+	scene.targeting = {"perk": "moshushi2", "side": R.Side.BLACK, "stage": 1, "data": {}}
+	scene._handle_swap_target(king_pos, R.Side.BLACK, "moshushi2")
+	_check(not scene.targeting.get("data", {}).has("a"), "双人:本地选目标拒绝敌方将/帅(不进入第二步)")
+	# 双人:非将/帅的敌方棋子可正常选中
+	scene.targeting = {"perk": "moshushi2", "side": R.Side.BLACK, "stage": 1, "data": {}}
+	scene._handle_swap_target(pawn_pos, R.Side.BLACK, "moshushi2")
+	_check(scene.targeting.get("data", {}).get("a", Vector2i(-1, -1)) == pawn_pos, "双人:敌方非将棋子可正常选中")
+	# 四人:选其他方将/帅被拒绝
+	scene._record4_history = []
+	scene.four_mode = true
+	scene.net_role = "local"
+	scene.actions_left4 = 1
+	scene.turn4 = 1  # 黑方回合
+	scene.board = R.make_board4()
+	var k4 := Vector2i(-1, -1)
+	for rr in 17:
+		for cc in 17:
+			var q = scene.board[rr][cc]
+			if q != null and q["side"] == 1 and q["type"] == R.Type.KING:
+				k4 = Vector2i(cc, rr)
+				break
+	_check(k4.x >= 0, "四人:找到黑将位置")
+	scene.targeting4 = {"perk": "moshushi2", "side": 0, "stage": 1, "data": {}}
+	scene._handle_swap_target4(k4, 0, "moshushi2")
+	_check(not scene.targeting4.get("data", {}).has("a"), "四人:逆位魔术师拒绝交换其他方将/帅")
+	scene.four_mode = false
+
 	if _failures == 0:
 		print("== NET SYNC OK ==")
 	else:

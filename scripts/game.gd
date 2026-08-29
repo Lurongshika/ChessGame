@@ -807,10 +807,18 @@ func _handle_swap_target4(pos: Vector2i, side: int, perk_id: String) -> void:
 		if p0 == null or p0["side"] == side:
 			_show_status4("请选择其他方的棋子")
 			return
+		# 逆位:其他方的将/帅不可被交换
+		if p0["type"] == R.Type.KING:
+			_show_status4("逆位魔术师:不能交换对方将/帅")
+			return
 		need_side = p0["side"]
 	var p = board[pos.y][pos.x]
 	if p == null or p["side"] != need_side:
 		_show_status4("请选择%s的棋子" %  ("己方" if need_side == side else "对方"))
+		return
+	# 逆位:第二个目标也不能是其他方的将/帅
+	if perk_id == "moshushi2" and p["type"] == R.Type.KING:
+		_show_status4("逆位魔术师:不能交换对方将/帅")
 		return
 	if targeting4["stage"] == 1:
 		targeting4["data"]["a"] = pos
@@ -1961,6 +1969,9 @@ func _apply_net_skill(perk_id: String, params: Dictionary) -> void:
 			var pa = board[a.y][a.x]
 			var pb = board[b.y][b.x]
 			if pa == null or pa["side"] != need_side or pb == null or pb["side"] != need_side:
+				return
+			# 逆位(交换对方棋子):敌方将/帅不可被交换(权威校验,防作弊)
+			if perk_id == "moshushi2" and (pa["type"] == R.Type.KING or pb["type"] == R.Type.KING):
 				return
 			board[a.y][a.x] = pb
 			board[b.y][b.x] = pa
@@ -4169,6 +4180,10 @@ func _handle_swap_target(pos: Vector2i, side: int, perk_id: String) -> void:
 	var p = board[pos.y][pos.x]
 	if p == null or p["side"] != need_side:
 		status_label.text = "请选择%s的棋子" % ("己方" if perk_id == "moshushi" else "对方")
+		return
+	# 逆位(交换对方棋子):敌方将/帅不可被交换
+	if perk_id == "moshushi2" and p["type"] == R.Type.KING:
+		status_label.text = "逆位魔术师:不能交换对方将/帅"
 		return
 	if targeting["stage"] == 1:
 		targeting["data"]["a"] = pos
