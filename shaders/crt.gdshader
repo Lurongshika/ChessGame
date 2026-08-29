@@ -15,7 +15,7 @@ vec2 curve(vec2 uv) {
 	uv = (uv - 0.5) * 2.0;
 	vec2 offset = abs(uv.yx) / vec2(max(curve_val, 1.0), max(curve_val, 1.0));
 	uv = uv + uv * offset * offset;
-	uv = uv * 1.2;  // 缩放(>1 画面缩小,能看到更多)
+	uv = uv * 1.0;  // 缩放(1.0 不额外缩放)
 	uv = (uv / 2.0) + 0.5;
 	return uv;
 }
