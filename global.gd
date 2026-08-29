@@ -19,6 +19,7 @@ var from_lobby := false     # 是否从等候大厅进入对局(复用大厅连�
 const SETTINGS_PATH := "user://settings.json"
 var crt_strength := 1.0     # CRT 效果强度(0.0-1.0)
 var crt_aberration := 0.0   # CRT 红蓝偏移(色差,0.0-0.01)
+var crt_curve := 12.0       # CRT 画面曲率(1.0-20.0,越小越弯,12 为默认)
 
 # 16 种棋子颜色预设(大厅选色板与对局棋子共用)
 # 8 种颜色:红蓝绿紫粉青黑橙(黑=黑方棋子色,用于玩家区分)
@@ -166,13 +167,14 @@ func set_crt_enabled(enabled: bool) -> void:
 		_crt_rect.visible = enabled
 
 
-# 应用 CRT 强度/色差到 shader
+# 应用 CRT 强度/色差/曲率到 shader
 func _apply_crt_params() -> void:
 	if _crt_rect == null or not (_crt_rect.material is ShaderMaterial):
 		return
 	var mat := _crt_rect.material as ShaderMaterial
 	mat.set_shader_parameter("strength", crt_strength)
 	mat.set_shader_parameter("aberration", crt_aberration)
+	mat.set_shader_parameter("curve_val", crt_curve)
 
 
 # 设置 CRT 效果强度(0.0-1.0),保存到本地设置
@@ -185,6 +187,13 @@ func set_crt_strength(v: float) -> void:
 # 设置 CRT 红蓝偏移(0.0-0.01),保存到本地设置
 func set_crt_aberration(v: float) -> void:
 	crt_aberration = clampf(v, 0.0, 0.01)
+	_apply_crt_params()
+	_save_settings()
+
+
+# 设置 CRT 画面曲率(1.0-20.0,越大越平),保存到本地设置
+func set_crt_curve(v: float) -> void:
+	crt_curve = clampf(v, 1.0, 20.0)
 	_apply_crt_params()
 	_save_settings()
 
@@ -203,6 +212,8 @@ func _load_settings() -> void:
 		crt_strength = clampf(float(data["crt_strength"]), 0.0, 1.0)
 	if data.has("crt_aberration"):
 		crt_aberration = clampf(float(data["crt_aberration"]), 0.0, 0.01)
+	if data.has("crt_curve"):
+		crt_curve = clampf(float(data["crt_curve"]), 1.0, 20.0)
 
 
 # 保存设置到 user://settings.json
@@ -213,6 +224,7 @@ func _save_settings() -> void:
 	f.store_string(JSON.stringify({
 		"crt_strength": crt_strength,
 		"crt_aberration": crt_aberration,
+		"crt_curve": crt_curve,
 	}))
 	f.close()
 

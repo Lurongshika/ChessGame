@@ -172,7 +172,7 @@ func _show_net_join() -> void:
 	_add_option_button("返回", Vector2(540, 440), _show_net_options)
 
 
-# 设置:CRT 效果强度 / 红蓝偏移(实时生效并保存)
+# 设置:CRT 效果强度 / 红蓝偏移 / 画面曲率(实时生效并保存)
 func _show_settings() -> void:
 	if opt_root != null:
 		opt_root.queue_free()
@@ -231,8 +231,32 @@ func _show_settings() -> void:
 		ab_val.text = "%.4f" % ab
 	)
 
+	# 画面曲率(0-100 → curve_val 20.0-1.0,越小越弯)
+	var cv_label := _label("画面曲率", 17, Color(0.85, 0.82, 0.75))
+	cv_label.position = Vector2(350, 420)
+	cv_label.size = Vector2(180, 34)
+	opt_root.add_child(cv_label)
+	var cv_slider := HSlider.new()
+	cv_slider.min_value = 0
+	cv_slider.max_value = 100
+	cv_slider.step = 1
+	cv_slider.value = (20.0 - Global.crt_curve) / (20.0 - 1.0) * 100.0
+	cv_slider.position = Vector2(550, 422)
+	cv_slider.size = Vector2(280, 30)
+	cv_slider.add_theme_font_override("font", _font())
+	opt_root.add_child(cv_slider)
+	var cv_val := _label("%d%%" % int((20.0 - Global.crt_curve) / (20.0 - 1.0) * 100.0), 17, Color(1.0, 0.9, 0.3))
+	cv_val.position = Vector2(850, 420)
+	cv_val.size = Vector2(90, 34)
+	opt_root.add_child(cv_val)
+	cv_slider.value_changed.connect(func(v: float):
+		var cv := 20.0 - v / 100.0 * (20.0 - 1.0)
+		Global.set_crt_curve(cv)
+		cv_val.text = "%d%%" % int(v)
+	)
+
 	_animate_opt_extra_buttons([])
-	_add_option_button("返回", Vector2(540, 490), _close_options)
+	_add_option_button("返回", Vector2(540, 520), _close_options)
 
 
 var net_mode := "skill"
