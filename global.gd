@@ -87,6 +87,52 @@ static func _collect_buttons(node: Node, out: Array) -> void:
 		_collect_buttons(child, out)
 
 
+# --- 音频(音效 + 循环 BGM) ---
+var _audio_player: AudioStreamPlayer
+var _bgm_player: AudioStreamPlayer
+var _sfx_cache := {}
+
+
+func _setup_audio() -> void:
+	_audio_player = AudioStreamPlayer.new()
+	add_child(_audio_player)
+	_bgm_player = AudioStreamPlayer.new()
+	add_child(_bgm_player)
+
+
+# 播放音效(缓存加载)
+func play_sfx(name: String, volume_db: float = 0.0) -> void:
+	if _audio_player == null:
+		return
+	if not _sfx_cache.has(name):
+		var path := "res://assets/sounds/%s.mp3" % name
+		if not ResourceLoader.exists(path):
+			return
+		_sfx_cache[name] = load(path)
+	var stream: AudioStream = _sfx_cache[name]
+	if stream == null:
+		return
+	_audio_player.stream = stream
+	_audio_player.volume_db = volume_db
+	_audio_player.play()
+
+
+# 循环播放 BGM
+func play_bgm(volume_db: float = -8.0) -> void:
+	if _bgm_player == null:
+		return
+	if _bgm_player.playing:
+		return
+	_bgm_player.stream = load("res://assets/sounds/bgm.mp3")
+	_bgm_player.volume_db = volume_db
+	_bgm_player.play()
+
+
+func stop_bgm() -> void:
+	if _bgm_player != null:
+		_bgm_player.stop()
+
+
 # --- CRT 后处理(全局,参考 CrtTypewriter) ---
 var _crt_layer: CanvasLayer
 var _crt_rect: ColorRect
@@ -124,6 +170,7 @@ var _switching := false
 
 
 func _ready() -> void:
+	_setup_audio()
 	# CRT 后处理层(全屏,参考 CrtTypewriter 效果)
 	_setup_crt()
 	# 过渡层(最高层,常驻)

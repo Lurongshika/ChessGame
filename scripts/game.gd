@@ -2312,6 +2312,7 @@ func _auto_pick_four() -> void:
 func _start_four_game() -> void:
 	phase = Phase.PLAY
 	board = R.make_board4()
+	Global.play_bgm()
 	_apply_four_skills_setup()
 	_refresh_perk_panels4()
 	_begin_turn4()
@@ -4418,6 +4419,7 @@ func _draw_pieces4() -> void:
 
 # 吃子特效:屏幕震动 + 被吃子粒子破碎消散
 func _trigger_capture_effect4(captured: Dictionary, to: Vector2i) -> void:
+	Global.play_sfx("kill", -4.0)
 	_shake_time = 0.3
 	_shake_strength = 9.0
 	# 被吃子位置生成碎片(颜色 = 被吃方颜色)
@@ -4597,6 +4599,7 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 		"t": 0.0,
 		"dur": 0.22,
 	})
+	Global.play_sfx("move_chess", -6.0)
 	# 隐者:隐身标记跟随移动
 	if hidden_pieces4.has(from):
 		hidden_pieces4[to] = hidden_pieces4[from]
