@@ -1262,6 +1262,10 @@ func _from_lobby_start4() -> void:
 		# 等所有客户端进入 game 场景后发 client_ready 再开局
 		_lobby_ready_done = false
 		four_ready_count = 0
+		# 单人开房(全部机器人补位,无真实客户端):无需等待,直接开始技能抽取
+		if _real_client_count4() <= 0:
+			_begin_four_draft_host()
+			return
 		net_wait_label = _make_label("等待玩家进入对局...", 26, Color(0.95, 0.85, 0.6))
 		net_wait_label.position = Vector2(0, 200)
 		net_wait_label.size = Vector2(1280, 120)
@@ -1325,6 +1329,7 @@ func three_peers4() -> int:
 
 
 # 真实客户端数量(lobby_players 中 pid>0 且非 AI 的,不含 host)
+# 注意:host 单人开房(全部机器人补位)时为 0,此时 host 无需等待,直接开局
 func _real_client_count4() -> int:
 	var n := 0
 	for side in Global.lobby_players:
@@ -1332,7 +1337,7 @@ func _real_client_count4() -> int:
 		var pid := int(info.get("pid", -1))
 		if pid > 1 and not bool(info.get("is_ai", false)):
 			n += 1
-	return maxi(n, 1)
+	return n
 
 
 # 主机:开始四人 DRAFT(自己选 + 给每个客户端发其方的选项)

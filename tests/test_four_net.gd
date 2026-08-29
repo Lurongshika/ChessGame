@@ -16,6 +16,30 @@ func _run() -> void:
 	g.game_mode = "four"
 	g.net_role = "host"
 	g.from_lobby = true
+
+	# --- 单人开四人(全 AI 补位):无需等待客户端 ready,直接进入技能抽取 ---
+	var scene0 = load("res://scenes/game.tscn").instantiate()
+	root.add_child(scene0)
+	await process_frame
+	scene0.net_role = "host"
+	scene0.four_mode = true
+	scene0.my_side4 = 1
+	scene0.four_side_to_peer = {0: -1, 1: 1, 2: -1, 3: -1}
+	root.get_child(0).lobby_players = {
+		1: {"name": "主机", "avatar_data": {}, "color": 0, "pid": 1, "is_ai": false},
+		3: {"name": "机器人A", "avatar_data": {}, "color": 1, "pid": -1, "is_ai": true},
+		0: {"name": "机器人B", "avatar_data": {}, "color": 2, "pid": -1, "is_ai": true},
+		2: {"name": "机器人C", "avatar_data": {}, "color": 3, "pid": -1, "is_ai": true},
+	}
+	_check(scene0._real_client_count4() == 0, "单人开四人:真实客户端数为 0")
+	scene0._from_lobby_start4()
+	_check(scene0.phase == scene0.Phase.SKILL_DRAFT, "单人开四人:直接进入技能抽取(不等待)")
+	# AI 方已自动选技能,host 选完 3 个确认后开局
+	_check(scene0.four_draft_picks[0].size() == 3 and scene0.four_draft_picks[2].size() == 3 and scene0.four_draft_picks[3].size() == 3, "单人开四人:AI 方自动选 3 技能")
+	scene0._draft_selected4 = scene0.draft4_options.slice(0, 3)
+	scene0._confirm_draft4()
+	_check(scene0.phase == scene0.Phase.PLAY, "单人开四人:host 选完技能后开局")
+	_check(scene0.perks4[0].size() == 3 and scene0.perks4[1].size() == 3, "单人开四人:四方技能已分配")
 	# 模拟大厅分配:4 方玩家(pid 1=host 对应 side 1 黑? 实际 host pid=1)
 	g.lobby_players = {
 		1: {"name": "主机", "avatar_data": {}, "color": 0, "pid": 1},
