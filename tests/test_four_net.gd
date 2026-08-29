@@ -156,6 +156,22 @@ func _run() -> void:
 	var star_data = game._state_to_data4()
 	_check(int(star_data["star2_charge4"]["0"]) == 2, "四人星星逆位:蓄势随状态广播")
 
+	# --- 四人命运之轮正位:使用后不跳回合,行动次数 +1(额外移动一次) ---
+	game.board = R.make_board4()
+	game.perks4 = {0: {"mingyun": true}, 1: {}, 2: {}, 3: {}}
+	game.turn4 = 2
+	game.actions_left4 = 1
+	game.skill_cd4 = {0: {}, 1: {}, 2: {}, 3: {}}
+	var turn_before_w: int = game.turn4
+	game._skill_wheel4("mingyun", 0)
+	_check(game.turn4 == turn_before_w, "四人命运之轮:使用后不跳回合")
+	_check(game.actions_left4 == 2, "四人命运之轮:行动次数 +1(可额外移动一次)")
+	# 走两步验证:第 1 步后仍可再走(actions 1),第 2 步后回合结束
+	game._move4(Vector2i(4, 13), Vector2i(4, 12), "move")
+	_check(game.actions_left4 == 1 and game.turn4 == 2, "四人命运之轮:第 1 步后仍可再走")
+	game._move4(Vector2i(4, 12), Vector2i(4, 11), "move")
+	_check(game.turn4 != 2, "四人命运之轮:第 2 步后回合结束(共 2 次行动)")
+
 	quit(0 if _fail_count == 0 else 1)
 
 
