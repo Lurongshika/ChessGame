@@ -5691,15 +5691,15 @@ func _try_move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 		free_retreat4_targets = []
 
 
-func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
+# 四人走子是否会被 _move4 拦截(隐身子不能吃/审判逆位/无敌/教皇/恶魔禁吃)
+# 供 _move4 校验与 AI 选走法共用;返回 true 表示该走法被拒绝
+func _move4_rejected(from: Vector2i, to: Vector2i, side: int) -> bool:
 	var mover = board[from.y][from.x]
 	if mover == null:
-		return
-	var side: int = mover["side"]
+		return true
 	# 隐者:隐身的子不能吃子(可移动到空格)
 	if hidden_pieces4.has(from) and board[to.y][to.x] != null:
-		_show_status4("隐身的棋子不能吃子")
-		return
+		return true
 	var captured = board[to.y][to.x]
 	# 审判逆位:敌方吃我方棋子时,判断"去掉技能后能否吃到";纯规则吃不到(靠技能增强)则禁吃
 	if captured != null and perks4[captured["side"]].has("shenpan2"):
@@ -5710,25 +5710,31 @@ func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 				pure_ok4 = true
 				break
 		if not pure_ok4:
-			_show_status4("审判:敌方不能用技能吃我方棋子")
-			return
+			return true
 	# 无敌/教皇/恶魔禁吃校验(审判:己方吃子无视敌方效果)
 	var ignores_effect4: bool = perks4[side].has("shenpan")
 	if captured != null and not ignores_effect4:
 		var ts: int = captured["side"]
 		if to == invincible_piece4 or invincible_side4 == ts:
-			_show_status4("该棋子本回合无敌,不可被吃")
-			return
+			return true
 		if pope_guarded4.has(to):
-			_show_status4("该棋子受教皇保护,不可被吃")
-			return
+			return true
 		if perks4[ts].has("emo") and last_eat4["side"] == side and last_eat4["type"] == mover["type"]:
-			_show_status4("恶魔:敌方同类型子被禁吃")
-			return
+			return true
 		# 恶魔逆位:被吃方 2 回合内只能被该类型攻击
 		if perks4[ts].has("emo2") and emo2_turns4[ts] > 0 and mover["type"] != emo2_type4[ts]:
-			_show_status4("恶魔:该方仅能被同类型子攻击")
-			return
+			return true
+	return false
+
+
+func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
+	var mover = board[from.y][from.x]
+	if mover == null:
+		return
+	var side: int = mover["side"]
+	if _move4_rejected(from, to, side):
+		return
+	var captured = board[to.y][to.x]
 	board[to.y][to.x] = mover
 	board[from.y][from.x] = null
 	# 移动动画:记录起点/终点像素
@@ -6229,43 +6235,24 @@ func _choose_ai_move4(side: int, perks_arr: Array) -> Dictionary:
 		return {}
 	var from: Vector2i = mv["from"]
 	var to: Vector2i = mv["to"]
-	# 目标吃子且目标方有审判逆位:校验纯规则能否吃到
-	var cap4 = board[to.y][to.x]
-	if cap4 != null and perks4[cap4["side"]].has("shenpan2"):
-		var pure_ok4 := false
-		var perks_none: Array = [{}, {}, {}, {}]
-		for pure_m in R.raw_moves4(board, from, perks_none):
-			if pure_m == to:
-				pure_ok4 = true
-				break
-		if not pure_ok4:
-			# 被审判禁止:改选其它不被禁止的走法(优先不吃子,或纯规则可吃)
-			var rng := RandomNumberGenerator.new()
-			rng.randomize()
-			var candidates: Array = []
-			for r in board.size():
-				for c in board[r].size():
-					var q = board[r][c]
-					if q == null or q["side"] != side:
+	# 首选走法会被 _move4 拦截(无敌/教皇/审判逆位/恶魔禁吃/隐身子吃子):改选其它不被拦截的走法
+	if _move4_rejected(from, to, side):
+		var candidates: Array = []
+		for r in board.size():
+			for c in board[r].size():
+				var q = board[r][c]
+				if q == null or q["side"] != side:
+					continue
+				var f := Vector2i(c, r)
+				for m in R.raw_moves4(board, f, perks_arr):
+					if _move4_rejected(f, m, side):
 						continue
-					var f := Vector2i(c, r)
-					for m in R.raw_moves4(board, f, perks_arr):
-						var mc = board[m.y][m.x]
-						if mc == null or not perks4[mc["side"]].has("shenpan2"):
-							candidates.append({"from": f, "to": m, "score": _ai4_score(f, m, side)})
-						else:
-							var ok4 := false
-							for pm in R.raw_moves4(board, f, [{}, {}, {}, {}]):
-								if pm == m:
-									ok4 = true
-									break
-							if ok4:
-								candidates.append({"from": f, "to": m, "score": _ai4_score(f, m, side)})
-			if candidates.is_empty():
-				return {}
-			candidates.sort_custom(func(a, b): return a["score"] > b["score"])
-			var pick: Dictionary = candidates[0]
-			return {"from": pick["from"], "to": pick["to"]}
+					candidates.append({"from": f, "to": m, "score": _ai4_score(f, m, side)})
+		if candidates.is_empty():
+			return {}
+		candidates.sort_custom(func(a, b): return a["score"] > b["score"])
+		var pick: Dictionary = candidates[0]
+		return {"from": pick["from"], "to": pick["to"]}
 	return mv
 
 

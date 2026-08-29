@@ -228,6 +228,28 @@ func _run() -> void:
 			ai_avoids_shenpan = pure_ok
 	_check(ai_avoids_shenpan, "四人AI:走子避开审判逆位禁止的技能增强吃子(不卡住)")
 
+	# --- 四人 AI 走子:避开无敌/教皇保护等被 _move4 拦截的吃子(否则 AI 卡住) ---
+	game.board = []
+	for rr in 17:
+		var row := []
+		for cc in 17:
+			row.append(null)
+		game.board.append(row)
+	game.board[6][5] = R.make_piece(R.Side.BLACK, R.Type.ROOK)   # 黑车 (5,6)
+	game.board[5][5] = R.make_piece(R.Side.RED, R.Type.ROOK)     # 红车 (5,5) 无敌
+	game.board[5][3] = R.make_piece(R.Side.RED, R.Type.KING)     # 红将 (3,5)
+	game.perks4 = {0: {}, 1: {}, 2: {}, 3: {}}
+	game.invincible_piece4 = Vector2i(5, 5)  # 红车被皇帝指定无敌
+	game.invincible_piece_side4 = 0
+	game.invincible_side4 = -1
+	game.last_eat4 = {"side": -1, "type": -1}
+	game.turn4 = 0
+	game.alive4 = {0: true, 1: true, 2: true, 3: true}
+	game.winner4 = -1
+	var perks_arr_ai2: Array = [game.perks4[0], game.perks4[1], game.perks4[2], game.perks4[3]]
+	var mv_ai2: Dictionary = game._choose_ai_move4(1, perks_arr_ai2)
+	_check(mv_ai2.is_empty() or not game._move4_rejected(mv_ai2["from"], mv_ai2["to"], 1), "四人AI:走子避开无敌棋子吃子(不卡住)")
+
 	quit(0 if _fail_count == 0 else 1)
 
 
