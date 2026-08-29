@@ -717,7 +717,7 @@ func _side_short4(side: int) -> String:
 
 func _record_skill4(side: int, perk_id: String) -> void:
 	var nm: String = perks_data[perk_id]["name"] if perks_data.has(perk_id) else perk_id
-	_record4_history.append({"text": "%s 使用[%s]" % [_side_short4(side), nm], "turn": turn4})
+	_record4_history.append({"text": "%s 使用[%s]" % [_side_short4(side), nm], "turn": turn4, "side": side})
 	_refresh_record4()
 
 
@@ -726,15 +726,16 @@ func _refresh_record4() -> void:
 		return
 	for child in record_box.get_children():
 		child.free()
-	# 合并走子与技能
-	var lines: Array = []
+	# 合并走子与技能,按玩家选择的颜色着色
 	var idx := 0
 	for m in _record4_history:
-		lines.append("%d. %s" % [idx + 1, m["text"]])
-		idx += 1
-	for line in lines:
-		var l := _make_label(line, 13, Color(0.85, 0.82, 0.75))
+		var side: int = int(m.get("side", -1))
+		var col: Color = Color(0.85, 0.82, 0.75)
+		if side >= 0 and side <= 3:
+			col = _side_color(side)
+		var l := _make_label("%d. %s" % [idx + 1, m["text"]], 13, col)
 		record_box.add_child(l)
+		idx += 1
 
 
 func _apply_skill_cd4(perk_id: String, side: int) -> void:
@@ -1025,6 +1026,9 @@ func _consume_turn_after_skill4() -> void:
 	else:
 		_update_status4()
 	queue_redraw()
+	# 联机:技能可能消耗回合,结束后必须广播,否则其他端仍停留在等待(目标型技能在点击目标后才执行)
+	if net_role == "host" and Global.from_lobby:
+		_broadcast_state4()
 
 
 func _net_avatar4(data: Dictionary, size: int) -> Texture2D:
@@ -5298,7 +5302,7 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 		_show_status4("%s 兵晋升为后!" % SIDE_NAMES4[side])
 	# 四人:记录走子
 	var piece_name: String = R.PIECE_NAMES[mover["type"]] if (side == 0 or side == 2) else R.PIECE_NAMES_BLACK[mover["type"]]
-	_record4_history.append({"text": "%s %s %d%d→%d%d" % [_side_short4(side), piece_name, from.x, from.y, to.x, to.y], "turn": turn4})
+	_record4_history.append({"text": "%s %s %d%d→%d%d" % [_side_short4(side), piece_name, from.x, from.y, to.x, to.y], "turn": turn4, "side": side})
 	_refresh_record4()
 	if captured != null:
 		# 吃子特效:屏幕震动 + 被吃子粒子破碎
@@ -5938,7 +5942,7 @@ func _apply_state_data4(data: Dictionary) -> void:
 	if data.has("record4_history"):
 		_record4_history = []
 		for rec in data["record4_history"]:
-			_record4_history.append({"text": str(rec.get("text", "")), "turn": int(rec.get("turn", 0))})
+			_record4_history.append({"text": str(rec.get("text", "")), "turn": int(rec.get("turn", 0)), "side": int(rec.get("side", -1))})
 		_refresh_record4()
 	_refresh_perk_panels4()
 	_update_status4()

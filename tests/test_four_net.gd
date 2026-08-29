@@ -91,6 +91,31 @@ func _run() -> void:
 			has_capture = true
 	_check(not has_capture, "四人隐身子:不能吃子(吃子目标被过滤)")
 
+	# --- 对局记录:含 side 字段,状态往返保留,按玩家颜色着色 ---
+	game.net_role = "host"
+	game.four_mode = true
+	game._record4_history = []
+	game.turn4 = 0
+	game._record_skill4(1, "nvjisi")
+	game._record_skill4(2, "yuzhe")
+	_check(game._record4_history.size() == 2, "四人:技能记录入历史")
+	_check(int(game._record4_history[0].get("side", -1)) == 1, "四人:技能记录带 side")
+	var rec_data = game._state_to_data4()
+	_check(rec_data.has("record4_history") and rec_data["record4_history"].size() == 2, "四人:状态广播含记录")
+	game._record4_history = []
+	game._apply_state_data4(rec_data)
+	_check(game._record4_history.size() == 2 and int(game._record4_history[0].get("side", -1)) == 1, "四人:客户端收到广播后记录含 side")
+	# 主机技能消耗回合后,广播状态反映新的 turn4(其他端不再停留等待)
+	game.turn4 = 0
+	game.actions_left4 = 1
+	game.skill_cd4 = {0: {}, 1: {}, 2: {}, 3: {}}
+	game.queen_charge4 = {0: 1, 1: 1, 2: 1, 3: 1}
+	game.siwang_charge4 = {0: 1, 1: 1, 2: 1, 3: 1}
+	var turn_before: int = game.turn4
+	game._consume_turn_after_skill4()
+	_check(game.turn4 != turn_before, "四人:技能消耗回合后 turn4 切换")
+	_check(int(game._state_to_data4()["turn4"]) == game.turn4, "四人:广播状态 turn4 与本地一致")
+
 	quit(0 if _fail_count == 0 else 1)
 
 
