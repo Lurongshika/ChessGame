@@ -65,6 +65,7 @@ static func flat_button(text: String, pos: Vector2, size: Vector2) -> Button:
 
 # --- UI 出场动画(所有界面:主菜单/大厅/图鉴/设置等,含返回上一级) ---
 # 遍历场景内所有 Button,按纵向位置排序,依次淡入 + 上浮
+# 容器内按钮(列表/菜单)按自身顺序短间隔逐个淡入,体现"一个个进入"
 static func animate_ui_in(root: Node) -> void:
 	var buttons: Array = []
 	_collect_buttons(root, buttons)
@@ -75,8 +76,18 @@ static func animate_ui_in(root: Node) -> void:
 		# 已透明(如菜单动画已处理)则跳过
 		if b.modulate.a <= 0.01:
 			continue
-		# 容器内按钮(列表/菜单由容器布局):不做逐个延迟动画,保持原样(避免长列表长时间等待)
+		# 容器内按钮(列表/菜单由容器布局):按自身在容器中的顺序短间隔逐个淡入
 		if _in_container(b):
+			var idx2 := 0
+			for child in b.get_parent().get_children():
+				if child == b:
+					break
+				if child is Button:
+					idx2 += 1
+			b.modulate.a = 0.0
+			var tw2 := root.create_tween()
+			tw2.tween_interval(idx2 * 0.02)
+			tw2.tween_property(b, "modulate:a", 1.0, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 			continue
 		b.modulate.a = 0.0
 		var tw := root.create_tween()
