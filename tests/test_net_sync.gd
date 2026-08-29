@@ -176,6 +176,19 @@ func _run() -> void:
 	scene._skill_wheel("mingyun", R.Side.RED)
 	_check(scene.turn == R.Side.RED, "命运之轮:释放后不跳过回合")
 	_check(scene.actions_left == 2, "命运之轮:本回合可多走一次")
+	# --- 命运之轮(逆位):随机两子协同,也不跳过本回合 ---
+	scene.net_role = "host"
+	scene.phase = scene.Phase.PLAY
+	scene.turn = R.Side.RED
+	scene.perks_red = {"mingyun2": true}
+	scene.perks_black = {}
+	scene._setup_board()
+	scene.actions_left = 1
+	scene.skill_cd = {0: {}, 1: {}}
+	scene._skill_wheel("mingyun2", R.Side.RED)
+	_check(scene.turn == R.Side.RED, "命运之轮逆位:释放后不跳过回合")
+	_check(scene.sync_pieces.size() == 2, "命运之轮逆位:两子进入协同状态")
+	_check(scene.actions_left == 1, "命运之轮逆位:不额外增加行动(仅协同)")
 
 	# --- 世界:变子按价值加权(弱子概率高,强子概率低) ---
 	var rolls := {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0}  # PAWN..CANNON

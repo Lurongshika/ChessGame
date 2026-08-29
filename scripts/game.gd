@@ -4044,7 +4044,7 @@ func _skill_queen(perk_id: String, side: int) -> void:
 
 func _skill_wheel(perk_id: String, side: int) -> void:
 	if perk_id == "mingyun2":
-		# 进阶:随机两子协同(下回合不消耗步数)
+		# 进阶:随机两子协同(移动不消耗步数),不跳过本回合
 		var own: Array[Vector2i] = []
 		for r in R.ROWS:
 			for c in R.COLS:
@@ -4057,9 +4057,9 @@ func _skill_wheel(perk_id: String, side: int) -> void:
 		own.shuffle()
 		sync_pieces = [own[0], own[1]]
 		_apply_skill_cd(perk_id, side)
-		status_label.text = "命运之轮:随机两子协同(下回合不消耗步数)"
+		status_label.text = "命运之轮:随机两子协同(移动不消耗步数)"
 		queue_redraw()
-		_consume_turn_after_skill()
+		_update_ui()
 		return
 	# 普通:本回合可额外移动一次(不能连续动同一子),释放不消耗本回合
 	actions_left += 1
@@ -4772,19 +4772,44 @@ func _draw_overlay(db: Array) -> void:
 	# 月亮逆位:象免费落位(蓝色)
 	for t in free_elephant_targets:
 		draw_circle(_pos_px(t), 6.0, Color(0.35, 0.6, 1.0, 0.95))
-	# 皇帝:同归于尽标记(红色框)
+	# 皇帝:同归于尽标记(紫色框 = 反制)
 	if not suicide_mark.is_empty():
 		var sp: Vector2i = suicide_mark["pos"]
-		draw_arc(_pos_px(sp), 25.0, 0, TAU, 32, Color(0.95, 0.25, 0.2), 3.0)
+		draw_arc(_pos_px(sp), 25.0, 0, TAU, 32, Color(0.6, 0.25, 0.85, 0.95), 3.0)
 	# 教皇:象路径阻挡的己方棋子获得无敌(金色描边)
 	for gpos in pope_guarded:
 		draw_arc(_pos_px(gpos), 27.0, 0, TAU, 40, Color(0.95, 0.8, 0.2, 0.95), 3.0)
-	# 隐者:己方可见的隐身棋子(蓝色圈 + "隐"字);对方视角完全看不到,不画标记
-	for hpos in hidden_pieces:
-		if not _is_visible_hidden(int(hidden_pieces[hpos]) % 100):
-			continue
-		draw_arc(_pos_px(hpos), 27.0, 0, TAU, 40, Color(0.4, 0.85, 1.0, 0.95), 3.5)
-		_draw_text(_pos_px(hpos) + Vector2(0, -34), "隐", 15, Color(0.4, 0.85, 1.0))
+	# 无敌状态:皇后全员无敌 / 皇帝指定无敌 → 金色描边
+	if invincible_side >= 0 or invincible_piece.x >= 0:
+		for r in db.size():
+			for c in db[r].size():
+				var q = db[r][c]
+				if q == null:
+					continue
+				var qpos := Vector2i(c, r)
+				if invincible_side == q["side"] or qpos == invincible_piece:
+					draw_arc(_pos_px(qpos), 27.0, 0, TAU, 40, Color(0.95, 0.8, 0.2, 0.95), 3.0)
+	# 反制状态:皇后全员反制 / 教皇逆位象反制 → 紫色描边
+	var purple := Color(0.6, 0.25, 0.85, 0.95)
+	if counter_side >= 0:
+		for r in db.size():
+			for c in db[r].size():
+				var q = db[r][c]
+				if q == null:
+					continue
+				if q["side"] == counter_side:
+					draw_arc(_pos_px(Vector2i(c, r)), 27.0, 0, TAU, 40, purple, 3.0)
+	for s4 in 2:
+		if perks_of(s4).has("jiaohuang2"):
+			for r in db.size():
+				for c in db[r].size():
+					var q = db[r][c]
+					if q != null and q["side"] == s4 and q["type"] == R.Type.ELEPHANT:
+						draw_arc(_pos_px(Vector2i(c, r)), 27.0, 0, TAU, 40, purple, 3.0)
+	# 命运之轮(逆位):协同两子淡蓝色描边
+	for spos in sync_pieces:
+		draw_arc(_pos_px(spos), 29.0, 0, TAU, 40, Color(0.45, 0.8, 1.0, 0.95), 3.0)
+	# 隐者:隐身棋子只保留半透明(棋子本体绘制),不画"隐"字与描边,避免暴露隐身位置
 
 
 func _pos_px(pos: Vector2i) -> Vector2:
@@ -4991,12 +5016,44 @@ func _draw_overlay4() -> void:
 			draw_arc(_pos_px4(m), 14.0, 0, TAU, 24, Color(0.85, 0.3, 0.25), 2.5)
 		else:
 			draw_circle(_pos_px4(m), 4.0, Color(0.2, 0.7, 0.3, 0.9))
-	# 隐者:己方可见的隐身棋子(蓝色圈 + "隐"字);对方视角完全看不到,不画标记
-	for hpos in hidden_pieces4:
-		if not _is_visible_hidden4(int(hidden_pieces4[hpos]) % 100):
-			continue
-		draw_arc(_pos_px4(hpos), 17.0, 0, TAU, 32, Color(0.4, 0.85, 1.0, 0.95), 3.0)
-		_draw_text(_pos_px4(hpos) + Vector2(0, -24), "隐", 13, Color(0.4, 0.85, 1.0))
+	# 皇帝:同归于尽标记(紫色框 = 反制)
+	if not suicide_mark4.is_empty():
+		var sp4: Vector2i = suicide_mark4["pos"]
+		draw_arc(_pos_px4(sp4), 16.0, 0, TAU, 24, Color(0.6, 0.25, 0.85, 0.95), 2.5)
+	# 教皇:象路径阻挡的己方棋子获得无敌(金色描边)
+	for gpos in pope_guarded4:
+		draw_arc(_pos_px4(gpos), 17.0, 0, TAU, 32, Color(0.95, 0.8, 0.2, 0.95), 2.5)
+	# 无敌状态:皇后全员无敌 / 皇帝指定无敌 → 金色描边
+	if invincible_side4 >= 0 or invincible_piece4.x >= 0:
+		for r in board.size():
+			for c in board[r].size():
+				var q = board[r][c]
+				if q == null:
+					continue
+				var qpos := Vector2i(c, r)
+				if invincible_side4 == q["side"] or qpos == invincible_piece4:
+					draw_arc(_pos_px4(qpos), 17.0, 0, TAU, 32, Color(0.95, 0.8, 0.2, 0.95), 2.5)
+	# 反制状态:皇后全员反制 / 教皇逆位象反制 → 紫色描边
+	var purple4 := Color(0.6, 0.25, 0.85, 0.95)
+	if counter_side4 >= 0:
+		for r in board.size():
+			for c in board[r].size():
+				var q = board[r][c]
+				if q == null:
+					continue
+				if q["side"] == counter_side4:
+					draw_arc(_pos_px4(Vector2i(c, r)), 17.0, 0, TAU, 32, purple4, 2.5)
+	for s5 in 4:
+		if perks4[s5].has("jiaohuang2"):
+			for r in board.size():
+				for c in board[r].size():
+					var q = board[r][c]
+					if q != null and q["side"] == s5 and q["type"] == R.Type.ELEPHANT:
+						draw_arc(_pos_px4(Vector2i(c, r)), 17.0, 0, TAU, 32, purple4, 2.5)
+	# 命运之轮(逆位):协同两子淡蓝色描边
+	for spos4 in sync_pieces4:
+		draw_arc(_pos_px4(spos4), 18.0, 0, TAU, 32, Color(0.45, 0.8, 1.0, 0.95), 2.5)
+	# 隐者:隐身棋子只保留半透明(棋子本体绘制),不画"隐"字与描边,避免暴露隐身位置
 
 
 func _handle_input4(event: InputEvent) -> void:
@@ -6196,9 +6253,9 @@ func _skill_wheel4(perk_id: String, side: int) -> void:
 		own.shuffle()
 		sync_pieces4 = [own[0], own[1]]
 		_apply_skill_cd4(perk_id, side)
-		_show_status4("命运之轮:随机两子协同(下回合不消耗步数)")
+		_show_status4("命运之轮:随机两子协同(移动不消耗步数)")
 		queue_redraw()
-		_consume_turn_after_skill4()
+		_update_status4()
 		return
 	actions_left4 += 1
 	_apply_skill_cd4(perk_id, side)
