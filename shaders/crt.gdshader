@@ -11,11 +11,11 @@ uniform float blur_size : hint_range(0.0, 0.01) = 0.0015;
 uniform float brightness : hint_range(0.8, 1.6) = 1.15;
 uniform float strength : hint_range(0.0, 1.0) = 1.0;
 
-// 屏幕弯曲:边缘向内凹陷
+// 屏幕弯曲:边缘向内凹陷(位移随 strength 缩放,强度 0 时完全不弯曲,避免密集纹理条纹)
 vec2 curve(vec2 uv) {
 	uv = (uv - 0.5) * 2.0;
 	vec2 offset = abs(uv.yx) / vec2(max(curve_val, 1.0), max(curve_val, 1.0));
-	uv = uv + uv * offset * offset;
+	uv = uv + uv * offset * offset * strength;
 	uv = (uv / 2.0) + 0.5;
 	return uv;
 }
@@ -72,6 +72,6 @@ void fragment() {
 	vec3 raw = texture(screen_texture, s_uv).rgb;
 	// 完整 CRT 效果
 	vec3 eff = crt_color(s_uv);
-	// 效果强度:0 = 仅保留曲率(无扫描线/色散/提亮),1 = 完整效果
+	// 效果强度:0 = 完全关闭 CRT(含曲率),1 = 完整效果
 	COLOR = vec4(mix(raw, eff, strength), 1.0);
 }
