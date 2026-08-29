@@ -16,12 +16,11 @@ vec2 curve(vec2 uv) {
 	uv = (uv - 0.5) * 2.0;
 	vec2 offset = abs(uv.yx) / vec2(max(curve_val, 1.0), max(curve_val, 1.0));
 	uv = uv + uv * offset * offset;
-	uv = uv * 1.0;  // 缩放(1.0 不额外缩放)
 	uv = (uv / 2.0) + 0.5;
 	return uv;
 }
 
-// CRT 主体:色散 + 模糊 + 扫描线 + 暗角
+// CRT 主体:色散 + 模糊 + 扫描线 + 暗角(在采样坐标上计算)
 vec3 crt_color(vec2 crt_uv) {
 	// 色散:RGB 通道微偏移(边缘更明显)
 	float dist = distance(crt_uv, vec2(0.5));
@@ -62,15 +61,17 @@ void fragment() {
 	vec2 uv = UV;
 	vec2 crt_uv = curve(uv);
 
-	// 原始画面(无效果)
-	vec3 raw = texture(screen_texture, uv).rgb;
-	vec3 eff;
+	// 采样坐标:raw 与 eff 必须一致,否则弯曲画面与原始画面叠加出现重影
+	vec2 s_uv = crt_uv;
 	// 弯曲后超出屏幕:回退到原始 UV(边缘不裁切,仅中部弯曲)
 	if (crt_uv.x < 0.0 || crt_uv.x > 1.0 || crt_uv.y < 0.0 || crt_uv.y > 1.0) {
-		eff = crt_color(uv);
-	} else {
-		eff = crt_color(crt_uv);
+		s_uv = uv;
 	}
-	// 效果强度:0 = 完全关闭 CRT,1 = 完全应用
+
+	// 原始画面(与 eff 同一采样坐标,避免重影;保留弯曲,无扫描线等效果)
+	vec3 raw = texture(screen_texture, s_uv).rgb;
+	// 完整 CRT 效果
+	vec3 eff = crt_color(s_uv);
+	// 效果强度:0 = 仅保留曲率(无扫描线/色散/提亮),1 = 完整效果
 	COLOR = vec4(mix(raw, eff, strength), 1.0);
 }
