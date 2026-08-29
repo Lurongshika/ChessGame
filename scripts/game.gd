@@ -4789,11 +4789,15 @@ func _piece_texture() -> ImageTexture:
 func _draw_overlay(db: Array) -> void:
 	if selected.x >= 0:
 		draw_arc(_pos_px(selected), 25.0, 0, TAU, 32, Color(0.95, 0.8, 0.2), 3.0)
+	# 协同棋子(命运之轮逆位):移动不消耗步数 = 免费移动,落点用蓝色
+	var is_sync_sel: bool = selected.x >= 0 and selected in sync_pieces
 	for m in moves_cache:
 		# 落位指示器:对方看不到的隐身子视作空位(绿点),避免暴露隐身位置
 		var target = db[m.y][m.x]
 		var hidden_target: bool = target != null and hidden_pieces.has(m) and not _is_visible_hidden(int(hidden_pieces[m]) % 100)
-		if target != null and not hidden_target:
+		if is_sync_sel:
+			draw_circle(_pos_px(m), 6.0, Color(0.3, 0.55, 0.95, 0.95))
+		elif target != null and not hidden_target:
 			draw_arc(_pos_px(m), 23.0, 0, TAU, 32, Color(0.85, 0.3, 0.25), 3.0)
 		else:
 			draw_circle(_pos_px(m), 6.0, Color(0.2, 0.7, 0.3, 0.9))
@@ -5038,14 +5042,17 @@ func _draw_overlay4() -> void:
 	if Global.game_rules.get("win_mode", "classic") == "occupy":
 		for spot in _occupy_spots4():
 			draw_circle(_pos_px4(spot), 5.0, Color(0, 0, 0, 0.85))
-	# 复制双人落位显示:选中黄圈 / 落位绿点(空位)红圈(吃子)
+	# 复制双人落位显示:选中黄圈 / 落位绿点(空位)红圈(吃子);协同棋子免费移动落点用蓝色
+	var is_sync_sel4: bool = selected4.x >= 0 and selected4 in sync_pieces4
 	if selected4.x >= 0:
 		draw_arc(_pos_px4(selected4), 16.0, 0, TAU, 24, Color(0.95, 0.8, 0.2), 2.5)
 	for m in moves4:
 		var t = board[m.y][m.x]
 		# 落位指示器:对方看不到的隐身子视作空位(绿点),避免暴露隐身位置
 		var hidden_target4: bool = t != null and hidden_pieces4.has(m) and not _is_visible_hidden4(int(hidden_pieces4[m]) % 100)
-		if t != null and not hidden_target4:
+		if is_sync_sel4:
+			draw_circle(_pos_px4(m), 4.0, Color(0.3, 0.55, 0.95, 0.95))
+		elif t != null and not hidden_target4:
 			draw_arc(_pos_px4(m), 14.0, 0, TAU, 24, Color(0.85, 0.3, 0.25), 2.5)
 		else:
 			draw_circle(_pos_px4(m), 4.0, Color(0.2, 0.7, 0.3, 0.9))
