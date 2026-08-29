@@ -157,6 +157,7 @@ var self_perk_list_box: VBoxContainer
 var enemy_perk_list_box: VBoxContainer
 var _four_perk_boxes: Array = []  # 四人模式:四方技能悬浮窗内容框
 var draft_root: Control
+var _draft_ui_shown := false  # 三选一界面是否已首次显示(首次弹入,刷新重建不重复)
 var result_root: Control
 var net_wait_label: Label
 var chat: Panel  # 对局聊天栏
@@ -398,8 +399,13 @@ func _build_record_panel() -> void:
 
 func _toggle_record() -> void:
 	record_visible = not record_visible
-	if record_panel != null:
-		record_panel.visible = record_visible
+	if record_panel == null:
+		return
+	if record_visible:
+		record_panel.visible = true
+		Global.pop_in(record_panel)
+	else:
+		Global.pop_out(record_panel, 0.25, func(): record_panel.visible = false)
 
 
 # 当前模式名(左上角)
@@ -1354,6 +1360,7 @@ func _show_net_draft_wait4(text: String) -> void:
 	label.size = Vector2(1280, 160)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	draft_root.add_child(label)
+	Global.pop_in_layer(draft_root, 0.4)
 
 
 func _apply_four_skills_setup() -> void:
@@ -1474,6 +1481,7 @@ func _show_net_wait() -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	draft_root.add_child(label)
 	net_wait_label = label
+	Global.pop_in_layer(draft_root, 0.4)
 
 	var mode_text := "技能模式" if not Global.standard_mode else "标准模式"
 	if net_role == "host":
@@ -2004,6 +2012,7 @@ func _show_net_draft_wait(text: String) -> void:
 	label.size = Vector2(1280, 160)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	draft_root.add_child(label)
+	Global.pop_in_layer(draft_root, 0.4)
 
 
 # 自动化测试:自动三选一(每次选第一张)
@@ -2363,6 +2372,9 @@ func _update_draft_ui() -> void:
 		# queue_free 延迟释放,避免在技能卡点击信号回调中立即 free 导致崩溃
 		draft_root.queue_free()
 		draft_root = null
+	# 首次进入选卡界面弹入;选卡刷新重建不重复弹入
+	var first_show := not _draft_ui_shown
+	_draft_ui_shown = true
 	draft_root = Control.new()
 	draft_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	ui.add_child(draft_root)
@@ -2416,6 +2428,8 @@ func _update_draft_ui() -> void:
 		hint.size = Vector2(1280, 24)
 		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		draft_root.add_child(hint)
+		if first_show:
+			Global.pop_in_layer(draft_root)
 		return
 
 	# 双人:旧标题
@@ -2454,6 +2468,8 @@ func _update_draft_ui() -> void:
 	info_label.size = Vector2(1280, 60)
 	info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	draft_root.add_child(info_label)
+	if first_show:
+		Global.pop_in_layer(draft_root)
 
 
 func _selected_names(side: int) -> String:
@@ -3220,6 +3236,7 @@ func _build_replay_ui() -> void:
 	var exit := _make_button("退出复盘", Vector2(560, 535), Vector2(160, 44))
 	exit.pressed.connect(_exit_replay)
 	replay_root.add_child(exit)
+	Global.pop_in_layer(replay_root)
 
 
 func _apply_replay() -> void:
@@ -3252,8 +3269,9 @@ func _exit_replay() -> void:
 	replay_mode = false
 	replay_auto = false
 	if replay_root != null:
-		replay_root.queue_free()
+		var root := replay_root
 		replay_root = null
+		Global.pop_out(root, 0.3, func(): root.queue_free())
 	if result_root != null:
 		result_root.visible = true
 	queue_redraw()
@@ -3362,6 +3380,7 @@ func _show_result() -> void:
 			Global.change_scene_with_fade("res://scenes/main.tscn")
 	)
 	result_root.add_child(menu)
+	Global.pop_in_layer(result_root)
 
 
 func _update_ui() -> void:

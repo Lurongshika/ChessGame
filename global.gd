@@ -93,6 +93,55 @@ static func _collect_buttons(node: Node, out: Array) -> void:
 		_collect_buttons(child, out)
 
 
+# --- 弹窗弹性动画(参考 godot-tween-cheatsheet 的 elastic) ---
+# 弹入:scale 0.7→1(带 overshoot 回弹) + 淡入
+static func pop_in(node: Control, dur: float = 0.6) -> void:
+	node.pivot_offset = node.size / 2.0
+	node.scale = Vector2(0.7, 0.7)
+	node.modulate.a = 0.0
+	var tw := node.create_tween()
+	tw.tween_property(node, "scale", Vector2.ONE, dur).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(node, "modulate:a", 1.0, dur * 0.6).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+# 弹出:scale 1→0.7 + 淡出,完成后回调(用于关闭后释放/隐藏)
+static func pop_out(node: Control, dur: float = 0.35, on_done: Callable = Callable()) -> void:
+	node.pivot_offset = node.size / 2.0
+	var tw := node.create_tween()
+	tw.tween_property(node, "scale", Vector2(0.7, 0.7), dur).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(node, "modulate:a", 0.0, dur).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	if on_done.is_valid():
+		tw.tween_callback(on_done)
+
+
+# 全屏遮罩层弹入:背景淡入 + 内容控件弹性弹入(避免整体缩放露边)
+# 用法:root 第一个子节点应为全屏 ColorRect 背景
+static func pop_in_layer(root: Control, dur: float = 0.55) -> void:
+	# 背景淡入
+	for child in root.get_children():
+		if child is ColorRect:
+			child.modulate.a = 0.0
+			var tw := root.create_tween()
+			tw.tween_property(child, "modulate:a", 1.0, dur * 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			break
+	# 内容控件(非背景)弹性弹入,依次延迟
+	var idx := 0
+	for child in root.get_children():
+		if child is ColorRect:
+			continue
+		if not (child is Control):
+			continue
+		var c := child as Control
+		c.pivot_offset = c.size / 2.0
+		c.scale = Vector2(0.7, 0.7)
+		c.modulate.a = 0.0
+		var tw := root.create_tween()
+		tw.tween_interval(idx * 0.06)
+		tw.tween_property(c, "scale", Vector2.ONE, dur).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(c, "modulate:a", 1.0, dur * 0.6).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		idx += 1
+
+
 # --- 音频(音效 + 循环 BGM) ---
 var _audio_player: AudioStreamPlayer
 var _bgm_player: AudioStreamPlayer

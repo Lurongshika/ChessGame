@@ -127,6 +127,9 @@ func _ready() -> void:
 			custom_opts = CustomOptions.new()
 			custom_opts.setup(_font(), func(_r): pass)
 			add_child(custom_opts)
+		else:
+			# 再次打开:弹出动画(首次创建时 setup 内部已有弹入)
+			Global.pop_in(custom_opts)
 		custom_opts.visible = true
 	)
 	add_child(opts_btn)

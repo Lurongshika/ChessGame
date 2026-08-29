@@ -24,14 +24,11 @@ var _expanded_size := Vector2(230, DEFAULT_EXPANDED_Y)
 
 
 func setup(title: String, font: Font) -> void:
-	# 弹入动画:scale 0.85→1(有回弹)
-	pivot_offset = size / 2.0
-	scale = Vector2(0.85, 0.85)
-	var tw := create_tween()
-	tw.tween_property(self, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_font_ref = font
 	# 外部应先设置好 position/size 再调用 setup
 	_expanded_size = Vector2(maxf(size.x, 160), maxf(size.y, TITLE_H + 60))
+	# 弹入动画:elastic 回弹(参考 godot-tween-cheatsheet)
+	Global.pop_in(self)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 	# 显式背景样式(固定颜色,折叠/展开不变化)
