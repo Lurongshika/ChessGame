@@ -581,11 +581,39 @@ func _run() -> void:
 	_check(scene.board[5][5] != null and scene.board[5][5]["type"] == R.Type.CANNON, "指令(四人):place 放置炮")
 	scene.four_mode = false
 
+	await _test_tab_completion()
+
 	if _failures == 0:
 		print("== NET SYNC OK ==")
 	else:
 		printerr("== %d NET SYNC CHECK(S) FAILED ==" % _failures)
 	quit(0 if _failures == 0 else 1)
+
+
+# ==================== Tab 补全测试 ====================
+func _test_tab_completion() -> void:
+	var scene = load("res://scenes/game.tscn").instantiate()
+	root.add_child(scene)
+	await process_frame
+	scene.perks_data = {"yuzhe": {"name": "愚者"}, "huanghou": {"name": "皇后"}}
+	# 空输入:字符串提示
+	var r0 = scene._chat_tab_complete("")
+	_check(r0.get("hint", "") is String, "Tab:空输入返回字符串提示")
+	# 命令名补全
+	_check(scene._chat_tab_complete("/pl").get("text", "") == "/place ", "Tab:/pl 补全为 /place ")
+	# place 单候选
+	_check(scene._chat_tab_complete("/place 3 7 马").get("text", "") == "/place 3 7 马", "Tab:/place 补全棋子类型")
+	_check(scene._chat_tab_complete("/place 3 7 n").get("text", "") == "/place 3 7 null", "Tab:/place null 补全")
+	# skill 多候选(完整指令)
+	var rs = scene._chat_tab_complete("/skill 红 yu")
+	_check(rs.get("text", "") == "/skill 红 yuzhe ", "Tab:/skill 唯一候选直接补全")
+	# charge 多候选(循环列表)
+	var rc = scene._chat_tab_complete("/charge 黑 hua")
+	var cands: Array = rc.get("hint", [])
+	_check(cands.size() == 2 and String(cands[0]).begins_with("/charge 黑 huanghou"), "Tab:/charge 多候选含完整指令")
+	# state
+	_check(scene._chat_tab_complete("/state 红 无").get("text", "") == "/state 红 无敌", "Tab:/state 补全状态")
+	_check(scene._chat_tab_complete("/state 2 6 隐").get("text", "") == "/state 2 6 隐身", "Tab:/state 坐标补全隐身")
 
 
 func _check(cond: bool, name: String) -> void:

@@ -329,7 +329,7 @@ func _build_ui() -> void:
 	# 联机对局聊天栏(左下角;本地模式不显示)
 	if Global.net_role != "local":
 		chat = ChatPanel.new()
-		chat.setup(_font(), _send_chat_game)
+		chat.setup(_font(), _send_chat_game, _chat_tab_complete)
 		ui.add_child(chat)
 
 	if four_mode:
@@ -1555,6 +1555,139 @@ func client_ready() -> void:
 #   /charge 方 id 值  设置技能充能(皇后/死亡充能、星星蓄势等)
 #   /state 方 无敌|反制  该方所有棋子无敌/反制
 #   /state x y 隐身|显形  指定位置棋子隐身/显形
+# ==================== 聊天指令 Tab 补全 ====================
+# 返回 {text: 补全后的输入, hint: 候选提示字符串/数组}
+func _chat_tab_complete(text: String) -> Dictionary:
+	var t := text
+	var trimmed := t.strip_edges()
+	# 空输入或仅 "/":提示命令列表(字符串,不循环)
+	if trimmed.is_empty() or trimmed == "/":
+		return {"text": t, "hint": "/place x y 类型|null\n/skill 方 id on|off\n/charge 方 id 值\n/state 方 无敌|反制 | /state x y 隐身|显形"}
+	var parts := trimmed.split(" ", false)
+	if parts.is_empty():
+		return {"text": t, "hint": ""}
+	var cmd := String(parts[0]).to_lower()
+	# 命令名补全(输入 /pl 等前缀 → 补全命令)
+	if not parts[0].begins_with("/") or parts[0] == "/" or (parts.size() == 1 and not trimmed.ends_with(" ")):
+		var cmds := ["/place ", "/skill ", "/charge ", "/state "]
+		var matched: Array = []
+		for c in cmds:
+			if c.begins_with(parts[0]):
+				matched.append(c)
+		if matched.size() == 1:
+			return {"text": matched[0], "hint": ""}
+		if matched.size() > 1:
+			return {"text": t, "hint": matched}
+		return {"text": t, "hint": cmds}
+	# 参数补全
+	match cmd:
+		"/place":
+			# /place x y 类型|null(始终尝试补全最后一个参数)
+			if parts.size() >= 2 and parts.size() <= 4:
+				var piece_names := ["帅", "将", "仕", "士", "相", "象", "马", "车", "炮", "兵", "卒", "后", "null"]
+				var cur := parts[3] if parts.size() >= 4 else ""
+				var matched_pieces: Array = []
+				for p in piece_names:
+					if p.begins_with(cur):
+						matched_pieces.append("/place %s %s %s" % [parts[1], parts[2], p])
+				if matched_pieces.size() == 1:
+					return {"text": String(matched_pieces[0]), "hint": ""}
+				return {"text": t, "hint": matched_pieces if not matched_pieces.is_empty() else piece_names}
+			return {"text": t, "hint": ""}
+		"/skill":
+			if parts.size() <= 2:
+				var cur_side := parts[1] if parts.size() >= 2 else ""
+				var sides := ["红", "黑", "绿", "蓝"]
+				var matched_sides: Array = []
+				for s in sides:
+					if s.begins_with(cur_side):
+						matched_sides.append("/skill %s " % s)
+				if matched_sides.size() == 1:
+					return {"text": String(matched_sides[0]), "hint": ""}
+				return {"text": t, "hint": matched_sides if not matched_sides.is_empty() else sides}
+			if parts.size() <= 3:
+				var cur_id := parts[2] if parts.size() >= 3 else ""
+				var ids: Array = []
+				if not perks_data.is_empty():
+					for id in perks_data:
+						ids.append(String(id))
+				var matched_ids: Array = []
+				for id in ids:
+					if id.begins_with(cur_id):
+						matched_ids.append("/skill %s %s " % [parts[1], id])
+				if matched_ids.size() == 1:
+					return {"text": String(matched_ids[0]), "hint": ""}
+				return {"text": t, "hint": matched_ids if not matched_ids.is_empty() else ids}
+			# on/off
+			var cur_sw := parts[3] if parts.size() >= 4 else ""
+			var sw := ["on", "off"]
+			var matched_sw: Array = []
+			for s2 in sw:
+				if s2.begins_with(cur_sw):
+					matched_sw.append("/skill %s %s %s" % [parts[1], parts[2], s2])
+			if matched_sw.size() == 1:
+				return {"text": String(matched_sw[0]), "hint": ""}
+			return {"text": t, "hint": matched_sw if not matched_sw.is_empty() else sw}
+		"/charge":
+			if parts.size() <= 2:
+				var cur_side2 := parts[1] if parts.size() >= 2 else ""
+				var sides2 := ["红", "黑", "绿", "蓝"]
+				var matched_sides2: Array = []
+				for s in sides2:
+					if s.begins_with(cur_side2):
+						matched_sides2.append(s)
+				if matched_sides2.size() == 1:
+					return {"text": "/charge %s " % matched_sides2[0], "hint": ""}
+				return {"text": t, "hint": matched_sides2 if not matched_sides2.is_empty() else sides2}
+			if parts.size() <= 3:
+				var cur_cid := parts[2] if parts.size() >= 3 else ""
+				var cids := ["huanghou", "huanghou2", "siwang", "siwang2", "xingxing2"]
+				var matched_cids: Array = []
+				for c in cids:
+					if c.begins_with(cur_cid):
+						matched_cids.append("/charge %s %s " % [parts[1], c])
+				if matched_cids.size() == 1:
+					return {"text": String(matched_cids[0]), "hint": ""}
+				return {"text": t, "hint": matched_cids if not matched_cids.is_empty() else cids}
+			return {"text": t, "hint": "值(0-3)"}
+		"/state":
+			# 坐标形式 /state x y 状态:parts[1] 是数字
+			var state_is_xy: bool = parts.size() >= 2 and parts[1].is_valid_int()
+			if state_is_xy:
+				# 补状态名(隐身/显形)
+				var st_all2 := ["隐身", "显形"]
+				var cur4 := parts[3] if parts.size() >= 4 else ""
+				var matched_st3: Array = []
+				for s5 in st_all2:
+					if s5.begins_with(cur4):
+						matched_st3.append("/state %s %s %s" % [parts[1], parts[2], s5])
+				if matched_st3.size() == 1:
+					return {"text": String(matched_st3[0]), "hint": ""}
+				return {"text": t, "hint": matched_st3 if not matched_st3.is_empty() else st_all2}
+			# 方形式:补方名
+			if parts.size() <= 2:
+				var cur2 := parts[1] if parts.size() >= 2 else ""
+				var sides3 := ["红", "黑", "绿", "蓝"]
+				var matched_sides3: Array = []
+				for s in sides3:
+					if s.begins_with(cur2):
+						matched_sides3.append("/state %s " % s)
+				if matched_sides3.size() == 1:
+					return {"text": String(matched_sides3[0]), "hint": ""}
+				return {"text": t, "hint": matched_sides3 if not matched_sides3.is_empty() else sides3}
+			# 补状态名(无敌/反制)
+			var cur3 := parts[2] if parts.size() >= 3 else ""
+			var st_all := ["无敌", "反制"]
+			var matched_st2: Array = []
+			for s4 in st_all:
+				if s4.begins_with(cur3):
+					matched_st2.append("/state %s %s" % [parts[1], s4])
+			if matched_st2.size() == 1:
+				return {"text": String(matched_st2[0]), "hint": ""}
+			return {"text": t, "hint": matched_st2 if not matched_st2.is_empty() else st_all}
+	return {"text": t, "hint": ""}
+
+
 func _try_exec_command(text: String) -> bool:
 	var t := text.strip_edges()
 	if not t.begins_with("/"):
