@@ -5,7 +5,7 @@ shader_type canvas_item;
 uniform sampler2D screen_texture : hint_screen_texture, filter_linear;
 
 uniform float scan_intensity : hint_range(0.0, 0.3) = 0.08;
-uniform float curve_val : hint_range(1.0, 10.0) = 4.0;
+uniform float curve_val : hint_range(1.0, 20.0) = 10.0;
 uniform float aberration : hint_range(0.0, 0.01) = 0.0012;
 uniform float blur_size : hint_range(0.0, 0.01) = 0.0015;
 uniform float brightness : hint_range(0.8, 1.6) = 1.15;
@@ -15,7 +15,7 @@ vec2 curve(vec2 uv) {
 	uv = (uv - 0.5) * 2.0;
 	vec2 offset = abs(uv.yx) / vec2(max(curve_val, 1.0), max(curve_val, 1.0));
 	uv = uv + uv * offset * offset;
-	uv = uv * 0.92;
+	uv = uv * 0.78;  // 整体向内压缩,避免边缘超出屏幕
 	uv = (uv / 2.0) + 0.5;
 	return uv;
 }
@@ -59,9 +59,9 @@ void fragment() {
 	vec2 uv = UV;
 	vec2 crt_uv = curve(uv);
 
-	// 弯曲后超出屏幕:黑色
+	// 弯曲后超出屏幕:回退到原始 UV(边缘不裁切,仅中部弯曲)
 	if (crt_uv.x < 0.0 || crt_uv.x > 1.0 || crt_uv.y < 0.0 || crt_uv.y > 1.0) {
-		COLOR = vec4(0.0, 0.0, 0.0, 1.0);
+		COLOR = vec4(crt_color(uv), 1.0);
 	} else {
 		COLOR = vec4(crt_color(crt_uv), 1.0);
 	}
