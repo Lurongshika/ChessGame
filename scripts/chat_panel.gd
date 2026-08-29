@@ -49,6 +49,7 @@ func setup(font: Font, on_send: Callable) -> void:
 	input_row.add_child(input)
 	send_btn = Button.new()
 	send_btn.text = "发送"
+	Global.style_flat_button(send_btn)
 	send_btn.add_theme_font_override("font", font)
 	send_btn.add_theme_font_size_override("font_size", 14)
 	send_btn.custom_minimum_size = Vector2(56, 32)

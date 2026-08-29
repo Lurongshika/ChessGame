@@ -584,13 +584,5 @@ func _make_button(text: String, pos: Vector2, size: Vector2) -> Button:
 	b.size = size
 	b.add_theme_font_override("font", _font())
 	b.add_theme_font_size_override("font_size", 16)
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.2, 0.22, 0.28)
-	sb.set_corner_radius_all(6)
-	b.add_theme_stylebox_override("normal", sb)
-	b.add_theme_stylebox_override("hover", sb)
-	var sbp := StyleBoxFlat.new()
-	sbp.bg_color = Color(0.3, 0.33, 0.42)
-	sbp.set_corner_radius_all(6)
-	b.add_theme_stylebox_override("pressed", sbp)
+	Global.style_flat_button(b)
 	return b

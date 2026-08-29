@@ -61,6 +61,7 @@ func setup(title: String, font: Font) -> void:
 
 	collapse_btn = Button.new()
 	collapse_btn.text = "—"
+	Global.style_flat_button(collapse_btn)
 	collapse_btn.position = Vector2(size.x - 44, 4)
 	collapse_btn.size = Vector2(38, TITLE_H - 8)
 	collapse_btn.add_theme_font_override("font", _font_ref)

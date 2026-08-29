@@ -114,6 +114,7 @@ func _button(text: String, pos: Vector2) -> Button:
 	b.size = Vector2(130, 52)
 	b.add_theme_font_override("font", _font())
 	b.add_theme_font_size_override("font_size", 20)
+	Global.style_flat_button(b)
 	return b
 
 

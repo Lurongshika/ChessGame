@@ -1682,16 +1682,17 @@ func _make_button(text: String, pos: Vector2, size: Vector2) -> Button:
 	b.size = size
 	b.add_theme_font_override("font", _font())
 	b.add_theme_font_size_override("font_size", 16)
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.2, 0.22, 0.28)
-	sb.set_corner_radius_all(6)
-	# 文字向右移动半个字号(8px)
-	sb.content_margin_left = 8.0
-	b.add_theme_stylebox_override("normal", sb)
-	b.add_theme_stylebox_override("hover", sb)
-	var sbp := StyleBoxFlat.new()
-	sbp.bg_color = Color(0.3, 0.33, 0.42)
-	sbp.set_corner_radius_all(6)
-	sbp.content_margin_left = 8.0
-	b.add_theme_stylebox_override("pressed", sbp)
+	# 透明背景 + 悬浮变黄;文字右移 8px
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0, 0, 0, 0)
+	normal.set_corner_radius_all(4)
+	normal.content_margin_left = 8.0
+	b.add_theme_stylebox_override("normal", normal)
+	b.add_theme_stylebox_override("hover", normal)
+	b.add_theme_stylebox_override("pressed", normal)
+	b.add_theme_stylebox_override("focus", normal)
+	b.add_theme_stylebox_override("hover_pressed", normal)
+	b.add_theme_color_override("font_color", Color(0.85, 0.82, 0.75))
+	b.add_theme_color_override("font_hover_color", Color(1.0, 0.9, 0.3))
+	b.add_theme_color_override("font_pressed_color", Color(1.0, 0.85, 0.2))
 	return b

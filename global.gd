@@ -24,6 +24,34 @@ const COLORS16 := [
 ]
 
 
+# --- 扁平按钮样式(无黑底,悬浮字变黄) ---
+static func style_flat_button(b: Button) -> void:
+	# 透明背景(无黑底)
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0, 0, 0, 0)
+	normal.set_corner_radius_all(4)
+	b.add_theme_stylebox_override("normal", normal)
+	b.add_theme_stylebox_override("hover", normal)
+	b.add_theme_stylebox_override("pressed", normal)
+	b.add_theme_stylebox_override("focus", normal)
+	b.add_theme_stylebox_override("hover_pressed", normal)
+	# 字体颜色:默认浅色,悬浮变黄
+	b.add_theme_color_override("font_color", Color(0.85, 0.82, 0.75))
+	b.add_theme_color_override("font_hover_color", Color(1.0, 0.9, 0.3))
+	b.add_theme_color_override("font_pressed_color", Color(1.0, 0.85, 0.2))
+	b.add_theme_color_override("font_focus_color", Color(0.85, 0.82, 0.75))
+
+
+# 创建扁平按钮(无黑底,悬浮变黄)
+static func flat_button(text: String, pos: Vector2, size: Vector2) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.position = pos
+	b.size = size
+	style_flat_button(b)
+	return b
+
+
 # --- CRT 后处理(全局,参考 CrtTypewriter) ---
 var _crt_layer: CanvasLayer
 var _crt_rect: ColorRect

@@ -41,6 +41,7 @@ func setup(font: Font, on_change: Callable) -> void:
 	# 右上角 X 关闭按钮
 	var close_btn := Button.new()
 	close_btn.text = "✕"
+	Global.style_flat_button(close_btn)
 	# 放在折叠按钮(右侧)左侧,避免重叠
 	close_btn.position = Vector2(size.x - 44 - 40, 4)
 	close_btn.size = Vector2(34, 28)
