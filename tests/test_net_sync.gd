@@ -210,7 +210,7 @@ func _run() -> void:
 	_check(scene.queen_charge[R.Side.RED] == 0, "皇后释放后充能消耗")
 	_check(scene.turn == R.Side.BLACK, "皇后释放后消耗本回合")
 
-	# --- 审判逆位:每回合使敌方失去一个技能并重新抽取 ---
+	# --- 审判逆位:敌方无法使用技能/受控棋子吃我方棋子,只能原版移动吃 ---
 	scene.net_role = "host"
 	scene.phase = scene.Phase.PLAY
 	scene.turn = R.Side.RED
@@ -220,8 +220,31 @@ func _run() -> void:
 	scene.actions_left = 1
 	var black_before: int = scene.perks_black.size()
 	scene._refresh_judgement(R.Side.RED)
-	_check(scene.perks_black.size() == black_before, "审判逆位:敌方技能数量不变(失去一个重抽一个)")
-	_check(not scene.perks_black.has("yuzhe") or not scene.perks_black.has("nvjisi"), "审判逆位:敌方失去一个技能")
+	_check(scene.perks_black.size() == black_before, "审判逆位:不再重抽/失去敌方技能(改为被动)")
+	# 被控制棋子(技能移动)不能吃有审判逆位的棋子
+	scene.board = []
+	for rr in R.ROWS:
+		var row := []
+		for cc in R.COLS:
+			row.append(null)
+		scene.board.append(row)
+	scene.board[3][0] = R.make_piece(R.Side.BLACK, R.Type.ROOK)  # 黑车 (0,3)
+	scene.board[3][4] = R.make_piece(R.Side.RED, R.Type.PAWN)    # 红兵 (4,3)
+	scene.turn = R.Side.BLACK
+	scene.perks_red = {"shenpan2": true}
+	scene.perks_black = {}
+	scene.invincible_side = -1
+	scene.invincible_piece = Vector2i(-1, -1)
+	scene.hidden_pieces = {}
+	scene.controlled_piece = {"pos": Vector2i(0, 3), "owner": R.Side.BLACK}
+	scene.controlled_turns = 1
+	scene.perks_red = {"shenpan2": true}
+	# 黑车(受控)吃红兵:红方有审判逆位 → 禁吃
+	_check(scene._validate_move(Vector2i(0, 3), Vector2i(4, 3), "move", R.Side.BLACK) == false, "审判逆位:受控棋子不能吃我方棋子")
+	scene.controlled_piece = {}
+	scene.controlled_turns = 0
+	# 普通走子吃不受限
+	_check(scene._validate_move(Vector2i(0, 3), Vector2i(4, 3), "move", R.Side.BLACK) == true, "审判逆位:原版移动可正常吃我方棋子")
 
 	# --- 月亮逆位:象免费移动(蓝色,不消耗步数,不结束回合) ---
 	scene.net_role = "local"

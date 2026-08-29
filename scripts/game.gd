@@ -52,6 +52,8 @@ var hermit_active := false      # 隐者:本回合移动的子隐身
 var controlled_piece := {}      # 倒吊人:{"pos": Vector2i, "owner": side} 获得控制权的对方棋子
 var disabled_skills := {0: "", 1: ""}  # 审判:每回合被禁用的敌方主动技能
 var last_eat := {"side": -1, "type": -1}  # 恶魔:上次吃子方与类型(禁同类型连续吃)
+var emo2_turns := {0: 0, 1: 0}  # 恶魔逆位:被吃方剩余免疫回合数
+var emo2_type := {0: -1, 1: -1}  # 恶魔逆位:被吃方的"吃它类型"(该类型可再吃,其他类型免疫)
 var all_hidden_turns := {0: 0, 1: 0}  # 隐者(进阶):全员隐身剩余回合数
 var skip_next_turn := {0: false, 1: false}  # 节制(进阶):下回合被跳过
 var invincible_piece := Vector2i(-1, -1)  # 皇帝:指定无敌的己方棋子
@@ -59,7 +61,11 @@ var invincible_piece_side := -1    # 皇帝:无敌棋子所属方(用于"己方�
 var counter_side := -1          # 皇后(进阶):反制方(该方棋子被吃时同归于尽)
 var siwang_charge := {0: 0, 1: 0}  # 死亡:被吃充能(己方每被吃 1 子 +1)
 var sync_pieces: Array = []     # 命运之轮(进阶):协同棋子(移动不消耗步数)
+var star2_charge := {0: 0, 1: 0}  # 星星逆位:蓄势(每蓄势可免费移动一个兵)
 var controlled_turns := 0       # 倒吊人:控制权剩余回合数
+var controlled_all_turns := 0   # 倒吊人逆位:全棋子控制剩余回合数(释放后跳过本回合,下回合起生效)
+var controlled_all_owner := -1  # 倒吊人逆位:全棋子控制权归属方
+var _controlled_moved: Array[Vector2i] = []  # 倒吊人逆位:本回合已移动的对方棋子
 var pope_guarded := {}          # 教皇:象路径上阻挡的己方棋子位置(获得无敌) -> {pos: true}
 var undo_snapshot := {}         # 图鉴演示:悔棋前完整状态快照(供撤销悔棋)
 var extra_turn := {0: false, 1: false}  # 节制:下回合追加行动
@@ -80,6 +86,8 @@ var hermit_active4 := false
 var controlled_piece4 := {}
 var disabled_skills4 := {0: "", 1: "", 2: "", 3: ""}
 var last_eat4 := {"side": -1, "type": -1}
+var emo2_turns4 := {0: 0, 1: 0, 2: 0, 3: 0}  # 四人:恶魔逆位被吃方免疫剩余回合
+var emo2_type4 := {0: -1, 1: -1, 2: -1, 3: -1}  # 四人:恶魔逆位被吃方的"吃它类型"
 var all_hidden_turns4 := {0: 0, 1: 0, 2: 0, 3: 0}
 var skip_next_turn4 := {0: false, 1: false, 2: false, 3: false}
 var invincible_piece4 := Vector2i(-1, -1)
@@ -88,6 +96,9 @@ var counter_side4 := -1
 var siwang_charge4 := {0: 0, 1: 0, 2: 0, 3: 0}
 var sync_pieces4: Array = []
 var controlled_turns4 := 0
+var controlled_all_turns4 := 0   # 四人:倒吊人逆位全棋子控制剩余回合数
+var controlled_all_owner4 := -1  # 四人:全棋子控制权归属方
+var _controlled_moved4: Array[Vector2i] = []  # 四人:本回合已移动的对方棋子
 var pope_guarded4 := {}
 var extra_turn4 := {0: false, 1: false, 2: false, 3: false}
 var suicide_mark4 := {}
@@ -663,8 +674,15 @@ func _activate_skill4(perk_id: String, side: int) -> void:
 			_skill_justice2_4(side)
 		"siwang2":
 			_skill_death2_4(side)
-		"moshushi", "moshushi2", "huangdi", "huangdi2", "zhanche", "zhanche2", "siwang", "diaodiao", "diaodiao2":
+		"moshushi", "moshushi2", "huangdi", "huangdi2", "zhanche", "zhanche2", "siwang", "diaodiao":
 			_start_targeting4(perk_id, side)
+		"diaodiao2":
+			# 逆位:跳过本回合,下回合起获得其他所有方棋子控制权三回合
+			controlled_all_turns4 = 3
+			controlled_all_owner4 = side
+			_apply_skill_cd4(perk_id, side)
+			_show_status4("倒吊人:跳过本回合,下回合起控制其他方所有棋子三回合")
+			_consume_turn_after_skill4()
 		_:
 			_show_status4("[%s] 该主动技能暂未实现" %  perks_data[perk_id]["name"])
 
@@ -706,7 +724,9 @@ func _apply_skill_cd4(perk_id: String, side: int) -> void:
 	var cd := _skill_cd_value(perk_id)
 	if cd <= 0:
 		return
-	if perks4[side].has("liliang") or perks4[side].has("liliang2"):
+	if perks4[side].has("liliang2"):
+		cd = maxi(cd - roundi(cd / 4.0), 0)  # 力量逆位:充能上限-1/4(四舍五入)
+	elif perks4[side].has("liliang"):
 		cd = maxi(cd - 1, 0)
 	if cd > 0:
 		skill_cd4[side][perk_id] = cd
@@ -904,32 +924,48 @@ func _handle_chariot_target4(pos: Vector2i, side: int, perk_id: String) -> void:
 			return
 		targeting4["stage"] = 2
 		targeting4["data"]["rook"] = pos
-		_show_status4("再选择车相邻的一枚己方棋子")
+		_show_status4("再选择车相邻的一枚棋子(正位:己方;逆位:含敌方)")
 	elif stage == 2:
 		var rook: Vector2i = targeting4["data"]["rook"]
 		var adj: bool = absi(pos.x - rook.x) + absi(pos.y - rook.y) == 1
 		if perk_id == "zhanche2" and adj:
 			adj = absi(pos.x - rook.x) != 1 or absi(pos.y - rook.y) != 1
-		if p == null or p["side"] != side or not adj:
+		if p == null or not adj:
+			_show_status4("请选择与车相邻(不含对角)的棋子" if perk_id == "zhanche2" else "请选择与车相邻的棋子")
+			return
+		if perk_id == "zhanche" and p["side"] != side:
 			_show_status4("请选择与车相邻的己方棋子")
 			return
 		targeting4["stage"] = 3
 		targeting4["data"]["piece"] = pos
 		var perks_arr: Array = [perks4[0], perks4[1], perks4[2], perks4[3]]
-		targeting4["data"]["landings"] = R.raw_moves4(board, rook, perks_arr)
-		_show_status4("点击车的可落位,将该子移至此处")
+		# 逆位:车移动到相邻子可落位;正位:相邻子移动到车可落位
+		if perk_id == "zhanche2":
+			targeting4["data"]["landings"] = R.raw_moves4(board, pos, perks_arr)
+			_show_status4("点击可落位,将车移至此处(通过相邻子移动车)")
+		else:
+			targeting4["data"]["landings"] = R.raw_moves4(board, rook, perks_arr)
+			_show_status4("点击车的可落位,将该子移至此处")
 	elif stage == 3:
 		var landings: Array = targeting4["data"]["landings"]
 		if not pos in landings:
 			_show_status4("请点击车的可落位点")
 			return
 		var from: Vector2i = targeting4["data"]["piece"]
-		var piece = board[from.y][from.x]
-		board[from.y][from.x] = null
-		board[pos.y][pos.x] = piece
+		var rook_pos: Vector2i = targeting4["data"]["rook"]
+		if perk_id == "zhanche2":
+			# 逆位:移动车到相邻子的可落位
+			var rook_piece = board[rook_pos.y][rook_pos.x]
+			board[rook_pos.y][rook_pos.x] = null
+			board[pos.y][pos.x] = rook_piece
+			_show_status4("战车:车已移至相邻子的可落位")
+		else:
+			var piece = board[from.y][from.x]
+			board[from.y][from.x] = null
+			board[pos.y][pos.x] = piece
+			_show_status4("战车:棋子已移至车可落位")
 		_done_targeting4()
 		_apply_skill_cd4(perk_id, side)
-		_show_status4("战车:棋子已移至车可落位")
 		queue_redraw()
 		_consume_turn_after_skill4()
 
@@ -1721,6 +1757,9 @@ func _state_to_data() -> Dictionary:
 		"controlled_piece": {} if controlled_piece.is_empty() else {"pos": [controlled_piece["pos"].x, controlled_piece["pos"].y], "owner": controlled_piece["owner"]},
 		"disabled_skills": {"0": disabled_skills[0], "1": disabled_skills[1]},
 		"last_eat": {"side": last_eat["side"], "type": last_eat["type"]},
+		"emo2_turns": {"0": emo2_turns[0], "1": emo2_turns[1]},
+		"emo2_type": {"0": emo2_type[0], "1": emo2_type[1]},
+		"star2_charge": {"0": star2_charge[0], "1": star2_charge[1]},
 		"all_hidden_turns": {"0": all_hidden_turns[0], "1": all_hidden_turns[1]},
 		"skip_next_turn": {"0": skip_next_turn[0], "1": skip_next_turn[1]},
 		"perks_red": perks_red,
@@ -1731,6 +1770,8 @@ func _state_to_data() -> Dictionary:
 		"siwang_charge": {"0": siwang_charge[0], "1": siwang_charge[1]},
 		"sync_pieces": _sync_pieces_to_data(),
 		"controlled_turns": controlled_turns,
+		"controlled_all_turns": controlled_all_turns,
+		"controlled_all_owner": controlled_all_owner,
 		"pope_guarded": _pope_to_data(),
 	}
 
@@ -1795,8 +1836,11 @@ func _apply_state_data(data: Dictionary) -> void:
 	disabled_skills = {0: str(data.get("disabled_skills", {}).get("0", "")), 1: str(data.get("disabled_skills", {}).get("1", ""))}
 	var le = data.get("last_eat", {})
 	last_eat = {"side": int(le.get("side", -1)), "type": int(le.get("type", -1))}
+	emo2_turns = {0: int(data.get("emo2_turns", {}).get("0", 0)), 1: int(data.get("emo2_turns", {}).get("1", 0))}
+	emo2_type = {0: int(data.get("emo2_type", {}).get("0", -1)), 1: int(data.get("emo2_type", {}).get("1", -1))}
 	all_hidden_turns = {0: int(data.get("all_hidden_turns", {}).get("0", 0)), 1: int(data.get("all_hidden_turns", {}).get("1", 0))}
 	skip_next_turn = {0: bool(data.get("skip_next_turn", {}).get("0", false)), 1: bool(data.get("skip_next_turn", {}).get("1", false))}
+	star2_charge = {0: int(data.get("star2_charge", {}).get("0", 0)), 1: int(data.get("star2_charge", {}).get("1", 0))}
 	if data.has("perks_red"):
 		perks_red = data["perks_red"]
 		perks_black = data["perks_black"]
@@ -1809,6 +1853,8 @@ func _apply_state_data(data: Dictionary) -> void:
 	for q in data.get("sync_pieces", []):
 		sync_pieces.append(Vector2i(int(q[0]), int(q[1])))
 	controlled_turns = int(data.get("controlled_turns", 0))
+	controlled_all_turns = int(data.get("controlled_all_turns", 0))
+	controlled_all_owner = int(data.get("controlled_all_owner", -1))
 	pope_guarded = {}
 	for pg in data.get("pope_guarded", []):
 		pope_guarded[Vector2i(int(pg[0]), int(pg[1]))] = true
@@ -1927,14 +1973,22 @@ func _apply_net_skill(perk_id: String, params: Dictionary) -> void:
 			_destroy_same_type(pos, side)
 			_consume_turn_after_skill()
 		"diaodiao", "diaodiao2":
+			if perk_id == "diaodiao2":
+				# 逆位:跳过本回合,下回合起获得所有对方棋子控制权三回合
+				controlled_all_turns = 3
+				controlled_all_owner = side
+				_apply_skill_cd(perk_id, side)
+				status_label.text = "倒吊人:跳过本回合,下回合起控制所有对方棋子三回合"
+				_consume_turn_after_skill()
+				return
 			var pos := Vector2i(int(params["pos"][0]), int(params["pos"][1]))
 			var p = board[pos.y][pos.x]
 			if p == null or p["side"] == side:
 				return
 			controlled_piece = {"pos": pos, "owner": side}
-			controlled_turns = 3 if perk_id == "diaodiao2" else 1
+			controlled_turns = 1
 			_apply_skill_cd(perk_id, side)
-			status_label.text = "倒吊人:获得对方棋子控制权" + ("三回合(不能吃子)" if perk_id == "diaodiao2" else "")
+			status_label.text = "倒吊人:获得对方棋子控制权一回合"
 			_consume_turn_after_skill()
 		"zhanche", "zhanche2":
 			var piece := Vector2i(int(params["piece"][0]), int(params["piece"][1]))
@@ -1949,15 +2003,25 @@ func _apply_net_skill(perk_id: String, params: Dictionary) -> void:
 					break
 			if rook.x < 0:
 				return
-			var piece_p = board[piece.y][piece.x]
-			if piece_p == null or piece_p["side"] != side:
-				return
-			if not landing in R.legal_moves(board, rook, perks_red, perks_black):
-				return
-			board[piece.y][piece.x] = null
-			board[landing.y][landing.x] = piece_p
-			_apply_skill_cd("zhanche", side)
-			status_label.text = "战车:棋子已移至车可落位"
+			if perk_id == "zhanche2":
+				# 逆位:移动车到相邻子(含敌方)的可落位
+				var rook_p = board[rook.y][rook.x]
+				if not landing in R.legal_moves(board, piece, perks_red, perks_black):
+					return
+				board[rook.y][rook.x] = null
+				board[landing.y][landing.x] = rook_p
+				_apply_skill_cd("zhanche2", side)
+				status_label.text = "战车:车已移至相邻子的可落位"
+			else:
+				var piece_p = board[piece.y][piece.x]
+				if piece_p == null or piece_p["side"] != side:
+					return
+				if not landing in R.legal_moves(board, rook, perks_red, perks_black):
+					return
+				board[piece.y][piece.x] = null
+				board[landing.y][landing.x] = piece_p
+				_apply_skill_cd("zhanche", side)
+				status_label.text = "战车:棋子已移至车可落位"
 			_consume_turn_after_skill()
 	queue_redraw()
 
@@ -2139,31 +2203,59 @@ func _validate_move(from: Vector2i, to: Vector2i, kind: String, side: int) -> bo
 	var p = board[from.y][from.x]
 	if p == null or side != turn:
 		return false
-	var is_controlled: bool = not controlled_piece.is_empty() and from == controlled_piece.get("pos", Vector2i(-1, -1)) and controlled_piece.get("owner", -1) == turn
+	# 倒吊人逆位:全棋子控制期可移动对方任意棋子(每子每回合一次)
+	var all_control: bool = controlled_all_turns > 0 and controlled_all_owner == turn
+	var is_controlled: bool = (not controlled_piece.is_empty() and from == controlled_piece.get("pos", Vector2i(-1, -1)) and controlled_piece.get("owner", -1) == turn) or (all_control and p["side"] != side)
 	if p["side"] != side and not is_controlled:
+		return false
+	# 全控制:每子每回合只能移动一次
+	if all_control and p["side"] != side and from in _controlled_moved:
 		return false
 	if kind == "move":
 		if not to in R.legal_moves(board, from, perks_red, perks_black):
+			return false
+		# 全控制/单子控制:被控子不能吃子
+		if is_controlled and board[to.y][to.x] != null:
+			return false
+		# 审判逆位:敌方不能以技能/受控棋子吃我方棋子(只能原版移动吃)
+		if board[to.y][to.x] != null and is_controlled and perks_of(board[to.y][to.x]["side"]).has("shenpan2"):
 			return false
 		# 隐者:隐身的子不能吃子(可移动到空格)
 		if hidden_pieces.has(from) and board[to.y][to.x] != null:
 			return false
 		if board[to.y][to.x] != null:
 			var ts: int = board[to.y][to.x]["side"]
-			if to == invincible_piece or invincible_side == ts:
-				return false
-			if pope_guarded.has(to):
-				return false
-			if perks_of(ts).has("emo") and last_eat["side"] == side and last_eat["type"] == p["type"]:
-				return false
-			if controlled_turns > 0 and is_controlled:
-				return false
+			# 审判:己方吃子时无视敌方棋子所携带效果(无敌/保护/恶魔禁吃等)
+			var ignores_effect: bool = perks_of(side).has("shenpan")
+			if not ignores_effect:
+				if to == invincible_piece or invincible_side == ts:
+					return false
+				if pope_guarded.has(to):
+					return false
+				if perks_of(ts).has("emo") and last_eat["side"] == side and last_eat["type"] == p["type"]:
+					return false
+				# 恶魔逆位:被吃方 2 回合内只能被该类型攻击,其他类型攻击无效
+				if perks_of(ts).has("emo2") and emo2_turns[ts] > 0 and p["type"] != emo2_type[ts]:
+					return false
+				if controlled_turns > 0 and is_controlled:
+					return false
 		return true
 	if kind == "free_retreat":
-		if free_retreat_used:
+		# 星星:兵无代价移动一格(任意方向,仅空格)
+		# 正位:每回合一次;逆位:消耗蓄势
+		if p["type"] != R.Type.PAWN:
 			return false
-		var fwd := -1 if side == R.Side.RED else 1
-		return to == from + Vector2i(0, -fwd) and board[to.y][to.x] == null
+		var star_ok: bool = false
+		if perks_of(side).has("xingxing") and not free_retreat_used:
+			star_ok = true
+		elif perks_of(side).has("xingxing2") and star2_charge[side] > 0:
+			star_ok = true
+		if not star_ok:
+			return false
+		if board[to.y][to.x] != null:
+			return false
+		var diff: Vector2i = to - from
+		return absi(diff.x) + absi(diff.y) == 1
 	if kind == "free_elephant":
 		# 月亮逆位:象免费移动到空格
 		if p["type"] != R.Type.ELEPHANT:
@@ -2357,6 +2449,10 @@ func _start_four_game() -> void:
 	Global.play_bgm()
 	_apply_four_skills_setup()
 	_refresh_perk_panels4()
+	# 愚者·逆位:开局无充能(满 CD,需 16 回合充能)
+	for s in 4:
+		if perks4[s].has("yuzhe2"):
+			skill_cd4[s]["yuzhe2"] = 16
 	_begin_turn4()
 	_update_status4()
 	queue_redraw()
@@ -2538,6 +2634,10 @@ func _start_game() -> void:
 	_setup_board()
 	_snapshot_initial()
 	_auto_save()
+	# 愚者·逆位:开局无充能(满 CD,需 16 回合充能)
+	for s in [0, 1]:
+		if perks_of(s).has("yuzhe2"):
+			skill_cd[s]["yuzhe2"] = 16
 	_begin_turn()
 
 
@@ -2653,10 +2753,32 @@ func _begin_turn() -> void:
 	# 隐者:下回合(己方回合)移动的子隐身
 	hermit_active = hermit_pending
 	hermit_pending = false
-	# 注:隐者隐身/皇后无敌/皇帝无敌等"持续一回合"效果,改为己方移动后清除(见 _perform_move)
-	counter_side = -1
+	# 注:隐者隐身/皇后无敌/皇帝无敌/皇后逆位反制等"持续一回合"效果,改为己方移动后清除(见 _perform_move)
 	sync_pieces = []
-	# 隐者(进阶):全员隐身倒计时
+	# 倒吊人逆位:全控制回合递减(在控制方回合开始减,生效 3 个己方回合)
+	if controlled_all_turns > 0 and controlled_all_owner == turn:
+		controlled_all_turns -= 1
+		_controlled_moved = []
+		if controlled_all_turns <= 0:
+			controlled_all_owner = -1
+	# 恶魔逆位:免疫回合递减(被吃方)
+	for s in [0, 1]:
+		if emo2_turns[s] > 0:
+			emo2_turns[s] -= 1
+			if emo2_turns[s] <= 0:
+				emo2_type[s] = -1
+	# 星星逆位:重置本回合蓄势使用标记
+	# 隐者(进阶):己方隐身子每回合每子 10% 概率破隐(逆位持久隐身标记为 side+100)
+	if not hidden_pieces.is_empty():
+		var rng := RandomNumberGenerator.new()
+		rng.randomize()
+		var reveal: Array[Vector2i] = []
+		for pos in hidden_pieces:
+			if hidden_pieces[pos] == turn + 100 and rng.randf() < 0.1:
+				reveal.append(pos)
+		for pos in reveal:
+			hidden_pieces.erase(pos)
+	# 隐者(进阶):全员隐身倒计时(旧逻辑保留兼容,不再由 yinzhe2 设置)
 	if all_hidden_turns[turn] > 0:
 		all_hidden_turns[turn] -= 1
 		if all_hidden_turns[turn] <= 0:
@@ -2751,27 +2873,8 @@ func _refresh_pope_guard(side: int) -> void:
 # 审判:每回合随机禁用敌方一个主动技能
 func _refresh_judgement(side: int) -> void:
 	disabled_skills[1 - side] = ""
-	if not perks_of(side).has("shenpan") and not perks_of(side).has("shenpan2"):
-		return
-	if perks_of(side).has("shenpan2"):
-		# 审判·逆位:使敌方失去一个技能并重新随机抽取
-		var enemy_ids: Array = perks_of(1 - side).keys()
-		if enemy_ids.is_empty():
-			return
-		var lost: String = enemy_ids.pick_random()
-		perks_of(1 - side).erase(lost)
-		var taken := {}
-		taken.merge(perks_red)
-		taken.merge(perks_black)
-		var new_opt := Perks.draw_options(1, taken, Global.perk_pool)
-		if not new_opt.is_empty():
-			perks_of(1 - side)[new_opt[0]] = true
-			var lost_name: String = perks_data[lost]["name"] if perks_data.has(lost) else lost
-			status_label.text = "审判:敌方失去[%s],重抽为[%s]" % [lost_name, perks_data[new_opt[0]]["name"]]
-		else:
-			var lost_name2: String = perks_data[lost]["name"] if perks_data.has(lost) else lost
-			status_label.text = "审判:敌方失去技能[%s]" % lost_name2
-		queue_redraw()
+	# 审判逆位:被动效果(敌方不能以技能吃我方棋子),无每回合动作
+	if not perks_of(side).has("shenpan"):
 		return
 	# 审判(正位):随机禁用敌方一个主动技能
 	var enemy_active: Array = []
@@ -2792,10 +2895,10 @@ func _turn_action_cap() -> int:
 
 
 # "持续一回合"效果在己方移动后清除:
-# 隐者隐身(己方标记的)/皇后无敌(己方释放的)/皇帝无敌(己方指定的一子)
+# 隐者隐身(己方标记的)/皇后无敌(己方释放的)/皇帝无敌(己方指定的一子)/皇后逆位反制
 # 说明:效果从释放开始覆盖"对方完整回合 + 己方回合直到移动",己方移动一步后到期
 func _expire_one_turn_effects(side: int) -> void:
-	# 隐者:己方标记的隐身子在己方移动后显形
+	# 隐者:己方标记的一回合隐身子在己方移动后显形(逆位持久隐身 side+100 不受影响)
 	var hidden_rm: Array[Vector2i] = []
 	for pos in hidden_pieces:
 		if hidden_pieces[pos] == side:
@@ -2809,6 +2912,9 @@ func _expire_one_turn_effects(side: int) -> void:
 	if invincible_piece_side == side:
 		invincible_piece = Vector2i(-1, -1)
 		invincible_piece_side = -1
+	# 皇后逆位反制:己方移动后结束
+	if counter_side == side:
+		counter_side = -1
 
 
 func _perform_move(from: Vector2i, to: Vector2i) -> void:
@@ -2820,9 +2926,13 @@ func _perform_move(from: Vector2i, to: Vector2i) -> void:
 	moves_cache = []
 	free_retreat_targets = []
 	# 隐者:隐身标记跟随棋子移动(己方移动被标记的隐身棋子时)
+	# 逆位持久隐身(side+100):移动后立刻破隐
 	if hidden_pieces.has(from):
-		hidden_pieces[to] = hidden_pieces[from]
-		hidden_pieces.erase(from)
+		if hidden_pieces[from] >= 100:
+			hidden_pieces.erase(from)
+		else:
+			hidden_pieces[to] = hidden_pieces[from]
+			hidden_pieces.erase(from)
 	# 隐者:下回合移动的子隐身(激活一次)
 	if hermit_active and not hidden_pieces.has(to):
 		hidden_pieces[to] = turn
@@ -2831,12 +2941,22 @@ func _perform_move(from: Vector2i, to: Vector2i) -> void:
 	if not controlled_piece.is_empty() and from == controlled_piece.get("pos", Vector2i(-1, -1)):
 		controlled_piece = {}
 		controlled_turns = 0
+	# 倒吊人逆位:全控制移动的对方棋子,记录本回合已移动
+	if controlled_all_turns > 0 and controlled_all_owner == turn:
+		var mover_p = board[to.y][to.x]
+		if mover_p != null and mover_p["side"] != turn:
+			_controlled_moved.append(from)
 	if captured != null:
 		hidden_pieces.erase(to)  # 吃掉目标位置的隐身子时,清除其隐身标记
 		# 恶魔:记录"谁用什么类型吃了"(被吃方有恶魔时,同类型不能连续吃)
 		if perks_of(captured["side"]).has("emo") or perks_of(captured["side"]).has("emo2"):
 			var atk = board[to.y][to.x]
 			last_eat = {"side": turn, "type": atk["type"] if atk != null else -1}
+		# 恶魔逆位:被吃方 2 回合内只能被该类型攻击(其他类型免疫)
+		if perks_of(captured["side"]).has("emo2"):
+			var atk2 = board[to.y][to.x]
+			emo2_turns[captured["side"]] = 2
+			emo2_type[captured["side"]] = atk2["type"] if atk2 != null else -1
 		_handle_capture(captured, to, turn)
 		if captured["type"] == R.Type.KING:
 			_snapshot_last_board()
@@ -2887,9 +3007,9 @@ func _handle_capture(captured: Dictionary, captured_pos: Vector2i, attacker_side
 	revive_count[victim_side] += 1
 	if perks_of(victim_side).has("lianren") and revive_count[victim_side] % 2 == 0:
 		_revive_piece(victim_side)
-	# 恋人(进阶):每被吃 5 子,随机摧毁对方 3 子
-	if perks_of(victim_side).has("lianren2") and revive_count[victim_side] % 5 == 0:
-		_destroy_random_enemy(victim_side, 3)
+	# 恋人(进阶):仅四人模式,每被吃 3 子,随机摧毁敌方 5 子
+	if four_mode and perks_of(victim_side).has("lianren2") and revive_count[victim_side] % 3 == 0:
+		_destroy_random_enemy(victim_side, 5)
 	# 皇后:己方每被吃 1 子,充能 +1(上限 3)
 	if perks_of(victim_side).has("huanghou") or perks_of(victim_side).has("huanghou2"):
 		queen_charge[victim_side] = mini(queen_charge[victim_side] + 1, 3)
@@ -2962,12 +3082,15 @@ func _birth_pos(side: int, type: int) -> Vector2i:
 
 
 func _perform_free_retreat(from: Vector2i, to: Vector2i) -> void:
-	# 退兵:兵无代价后退一格,不消耗行动次数
+	# 星星:兵无代价移动一格,不消耗行动次数
 	_record_move(from, to, "free_retreat")
 	var p = board[from.y][from.x]
 	board[from.y][from.x] = null
 	board[to.y][to.x] = p
 	free_retreat_used = true
+	# 星星逆位:消耗 1 蓄势(允许连续移动同一兵)
+	if perks_of(turn).has("xingxing2") and star2_charge[turn] > 0:
+		star2_charge[turn] -= 1
 	selected = Vector2i(-1, -1)
 	moves_cache = []
 	free_retreat_targets = []
@@ -3582,7 +3705,9 @@ func _apply_skill_cd(perk_id: String, side: int) -> void:
 	var cd := _skill_cd_value(perk_id)
 	if cd <= 0:
 		return
-	if perks_of(side).has("liliang") or perks_of(side).has("liliang2"):
+	if perks_of(side).has("liliang2"):
+		cd = maxi(cd - roundi(cd / 4.0), 0)  # 力量逆位:充能上限-1/4(四舍五入)
+	elif perks_of(side).has("liliang"):
 		cd = maxi(cd - 1, 0)  # 力量:主动技能充能上限-1
 	if cd > 0:
 		skill_cd[side][perk_id] = cd
@@ -3607,8 +3732,21 @@ func _activate_skill(perk_id: String, side: int) -> void:
 			_skill_justice2(side)
 		"siwang2":
 			_skill_death2(side)
-		"moshushi", "moshushi2", "huangdi", "huangdi2", "zhanche", "zhanche2", "siwang", "diaodiao", "diaodiao2":
+		"moshushi", "moshushi2", "huangdi", "huangdi2", "zhanche", "zhanche2", "siwang", "diaodiao":
 			_start_targeting(perk_id, side)
+		"diaodiao2":
+			# 逆位:跳过本回合,下回合起获得所有对方棋子控制权三回合
+			controlled_all_turns = 3
+			controlled_all_owner = side
+			_apply_skill_cd(perk_id, side)
+			status_label.text = "倒吊人:跳过本回合,下回合起控制所有对方棋子三回合"
+			_consume_turn_after_skill()
+		"xingxing2":
+			# 星星逆位:跳过本回合,获得 2 蓄势(每蓄势可免费移动一个兵)
+			star2_charge[side] += 2
+			_apply_skill_cd(perk_id, side)
+			status_label.text = "星星:跳过本回合,获得 2 蓄势(可免费移动 2 个兵)"
+			_consume_turn_after_skill()
 		_:
 			status_label.text = "[%s] 该主动技能暂未实现" % perks_data[perk_id]["name"]
 	# 同步技能执行完:补记棋盘快照(异步 targeting 技能在 _done_targeting 补)
@@ -3785,15 +3923,15 @@ func _skill_wheel(perk_id: String, side: int) -> void:
 
 func _skill_hermit(perk_id: String, side: int) -> void:
 	if perk_id == "yinzhe2":
-		# 进阶:敌我所有子隐身三回合
+		# 进阶:己方所有子隐身(每回合每子 10% 概率破隐,移动后立刻破隐)
+		# 标记用 side+100 区分"逆位持久隐身"(不受一回合清除影响)
 		for r in R.ROWS:
 			for c in R.COLS:
 				var p = board[r][c]
-				if p != null and p["type"] != R.Type.KING:
-					hidden_pieces[Vector2i(c, r)] = p["side"]
-		all_hidden_turns[side] = 3
+				if p != null and p["side"] == side and p["type"] != R.Type.KING:
+					hidden_pieces[Vector2i(c, r)] = side + 100
 		_apply_skill_cd(perk_id, side)
-		status_label.text = "隐者:敌我所有子隐身三回合"
+		status_label.text = "隐者:己方所有子隐身(每回合10%概率破隐,移动即破隐)"
 		queue_redraw()
 		_consume_turn_after_skill()
 		return
@@ -4024,19 +4162,27 @@ func _handle_chariot_target(pos: Vector2i, side: int, perk_id: String) -> void:
 			return
 		targeting["stage"] = 2
 		targeting["data"]["rook"] = pos
-		status_label.text = "再选择车相邻的一枚己方棋子"
+		status_label.text = "再选择车相邻的一枚棋子(正位:己方;逆位:含敌方)"
 	elif stage == 2:
 		var rook: Vector2i = targeting["data"]["rook"]
 		var adj: bool = absi(pos.x - rook.x) + absi(pos.y - rook.y) == 1
 		if perk_id == "zhanche2" and adj:
 			adj = absi(pos.x - rook.x) != 1 or absi(pos.y - rook.y) != 1  # 进阶:不含对角相邻
-		if p == null or p["side"] != side or not adj:
-			status_label.text = "请选择与车相邻(不含对角)的己方棋子" if perk_id == "zhanche2" else "请选择与车相邻的己方棋子"
+		if p == null or not adj:
+			status_label.text = "请选择与车相邻(不含对角)的棋子" if perk_id == "zhanche2" else "请选择与车相邻的棋子"
+			return
+		if perk_id == "zhanche" and p["side"] != side:
+			status_label.text = "请选择与车相邻的己方棋子"
 			return
 		targeting["stage"] = 3
 		targeting["data"]["piece"] = pos
-		targeting["data"]["landings"] = R.legal_moves(board, rook, perks_red, perks_black)
-		status_label.text = "点击车的可落位,将该子移至此处"
+		# 逆位:车移动到相邻子可落位;正位:相邻子移动到车可落位
+		if perk_id == "zhanche2":
+			targeting["data"]["landings"] = R.legal_moves(board, pos, perks_red, perks_black)
+			status_label.text = "点击可落位,将车移至此处(通过相邻子移动车)"
+		else:
+			targeting["data"]["landings"] = R.legal_moves(board, rook, perks_red, perks_black)
+			status_label.text = "点击车的可落位,将该子移至此处"
 	elif stage == 3:
 		var landings: Array = targeting["data"]["landings"]
 		if not pos in landings:
@@ -4048,12 +4194,20 @@ func _handle_chariot_target(pos: Vector2i, side: int, perk_id: String) -> void:
 			request_skill.rpc_id(1, perk_id, {"piece": [from.x, from.y], "landing": [pos.x, pos.y]})
 			status_label.text = "战车:技能已发送,等待同步"
 			return
-		var piece = board[from.y][from.x]
-		board[from.y][from.x] = null
-		board[pos.y][pos.x] = piece
+		var rook_pos: Vector2i = targeting["data"]["rook"]
+		if perk_id == "zhanche2":
+			# 逆位:移动车到相邻子的可落位
+			var rook_piece = board[rook_pos.y][rook_pos.x]
+			board[rook_pos.y][rook_pos.x] = null
+			board[pos.y][pos.x] = rook_piece
+			status_label.text = "战车:车已移至相邻子的可落位"
+		else:
+			var piece = board[from.y][from.x]
+			board[from.y][from.x] = null
+			board[pos.y][pos.x] = piece
+			status_label.text = "战车:棋子已移至车可落位"
 		_done_targeting()
 		_apply_skill_cd(perk_id, side)
-		status_label.text = "战车:棋子已移至车可落位"
 		_refresh_move_log()
 		if net_role == "host":
 			_consume_turn_after_skill()
@@ -4204,16 +4358,19 @@ func _select(pos: Vector2i) -> void:
 		for m in R.legal_moves(board, pos, perks_red, perks_black):
 			if board[m.y][m.x] == null:
 				free_elephant_targets.append(m)
-	# 退兵:本回合未用时,选中的兵显示免费后退位(蓝色,仅空格)
-	if (
-		p["type"] == R.Type.PAWN
-		and (perks_of(turn).has("xingxing") or perks_of(turn).has("xingxing2"))
-		and not free_retreat_used
-	):
-		var fwd := -1 if turn == R.Side.RED else 1
-		var back := pos + Vector2i(0, -fwd)
-		if R.in_board(back) and board[back.y][back.x] == null:
-			free_retreat_targets.append(back)
+	# 星星:兵免费移动(蓝色,仅空格,任意方向一格)
+	# 正位:每回合一次;逆位:消耗蓄势(每蓄势一次,允许连续移动同一兵)
+	var star_free: bool = false
+	if p["type"] == R.Type.PAWN:
+		if perks_of(turn).has("xingxing") and not free_retreat_used:
+			star_free = true
+		elif perks_of(turn).has("xingxing2") and star2_charge[turn] > 0:
+			star_free = true
+	if star_free:
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var free_mv: Vector2i = pos + d
+			if R.in_board(free_mv) and board[free_mv.y][free_mv.x] == null:
+				free_retreat_targets.append(free_mv)
 	queue_redraw()
 
 
@@ -4315,7 +4472,7 @@ func _draw_pieces(db: Array) -> void:
 				continue
 			var hpos := Vector2i(c, r)
 			var is_hidden: bool = hidden_pieces.has(hpos)
-			if is_hidden and not _is_visible_hidden(hidden_pieces[hpos]):
+			if is_hidden and not _is_visible_hidden(int(hidden_pieces[hpos]) % 100):
 				continue  # 对方的隐身棋子:完全看不到,不绘制
 			var center := _pos_px(hpos)
 			# 隐者:己方隐身棋子半透明显示(可见"隐身中",且不能吃子)
@@ -4365,7 +4522,7 @@ func _draw_overlay(db: Array) -> void:
 	for m in moves_cache:
 		# 落位指示器:对方看不到的隐身子视作空位(绿点),避免暴露隐身位置
 		var target = db[m.y][m.x]
-		var hidden_target: bool = target != null and hidden_pieces.has(m) and not _is_visible_hidden(hidden_pieces[m])
+		var hidden_target: bool = target != null and hidden_pieces.has(m) and not _is_visible_hidden(int(hidden_pieces[m]) % 100)
 		if target != null and not hidden_target:
 			draw_arc(_pos_px(m), 23.0, 0, TAU, 32, Color(0.85, 0.3, 0.25), 3.0)
 		else:
@@ -4385,7 +4542,7 @@ func _draw_overlay(db: Array) -> void:
 		draw_arc(_pos_px(gpos), 27.0, 0, TAU, 40, Color(0.95, 0.8, 0.2, 0.95), 3.0)
 	# 隐者:己方可见的隐身棋子(蓝色圈 + "隐"字);对方视角完全看不到,不画标记
 	for hpos in hidden_pieces:
-		if not _is_visible_hidden(hidden_pieces[hpos]):
+		if not _is_visible_hidden(int(hidden_pieces[hpos]) % 100):
 			continue
 		draw_arc(_pos_px(hpos), 27.0, 0, TAU, 40, Color(0.4, 0.85, 1.0, 0.95), 3.5)
 		_draw_text(_pos_px(hpos) + Vector2(0, -34), "隐", 15, Color(0.4, 0.85, 1.0))
@@ -4609,23 +4766,25 @@ func _handle_input4(event: InputEvent) -> void:
 		if my_side4 < 0 or current_side4() != my_side4:
 			return
 	var side := current_side4()
+	# 倒吊人逆位:全控制期可操作其他方棋子
+	var all_control4: bool = controlled_all_turns4 > 0 and controlled_all_owner4 == side
 	# 用旋转后的逻辑坐标查棋盘(原始 c,r 是显示坐标,旋转后对应别的格子)
 	var p = board[pos.y][pos.x] if R.in_board(pos, board) else null
 	if net_role != "local" and Global.from_lobby:
-		if p != null and p["side"] != my_side4 and selected4.x < 0:
+		if p != null and p["side"] != my_side4 and selected4.x < 0 and not (all_control4 and p["side"] != my_side4):
 			return
 	if selected4.x >= 0:
 		if pos in moves4:
 			_try_move4(selected4, pos)
 			return
-		if p != null and p["side"] == side:
+		if p != null and (p["side"] == side or all_control4):
 			_select4(pos)
 			return
 		selected4 = Vector2i(-1, -1)
 		moves4 = []
 		queue_redraw()
 		return
-	if p != null and p["side"] == side:
+	if p != null and (p["side"] == side or all_control4):
 		_select4(pos)
 
 
@@ -4663,10 +4822,17 @@ func _try_move4(from: Vector2i, to: Vector2i) -> void:
 	if net_role == "host":
 		var side := current_side4()
 		var p = board[from.y][from.x]
-		if p == null or p["side"] != side:
+		var all_ctrl4: bool = controlled_all_turns4 > 0 and controlled_all_owner4 == side
+		if p == null or (p["side"] != side and not all_ctrl4):
 			return
 		if not to in R.raw_moves4(board, from, [perks4[0], perks4[1], perks4[2], perks4[3]]):
 			return
+		# 全控制:每子每回合限移一次,不能吃子
+		if all_ctrl4 and p["side"] != side:
+			if from in _controlled_moved4:
+				return
+			if board[to.y][to.x] != null:
+				return
 		on_move4.rpc(from, to)
 	else:
 		request_move4.rpc_id(1, from, to)
@@ -4682,8 +4848,9 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 		_show_status4("隐身的棋子不能吃子")
 		return
 	var captured = board[to.y][to.x]
-	# 无敌/教皇/恶魔禁吃校验
-	if captured != null:
+	# 无敌/教皇/恶魔禁吃校验(审判:己方吃子无视敌方效果)
+	var ignores_effect4: bool = perks4[side].has("shenpan")
+	if captured != null and not ignores_effect4:
 		var ts: int = captured["side"]
 		if to == invincible_piece4 or invincible_side4 == ts:
 			_show_status4("该棋子本回合无敌,不可被吃")
@@ -4693,6 +4860,10 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 			return
 		if perks4[ts].has("emo") and last_eat4["side"] == side and last_eat4["type"] == mover["type"]:
 			_show_status4("恶魔:敌方同类型子被禁吃")
+			return
+		# 恶魔逆位:被吃方 2 回合内只能被该类型攻击
+		if perks4[ts].has("emo2") and emo2_turns4[ts] > 0 and mover["type"] != emo2_type4[ts]:
+			_show_status4("恶魔:该方仅能被同类型子攻击")
 			return
 	board[to.y][to.x] = mover
 	board[from.y][from.x] = null
@@ -4705,10 +4876,13 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 		"dur": 0.22,
 	})
 	Global.play_sfx("move_chess", -6.0)
-	# 隐者:隐身标记跟随移动
+	# 隐者:隐身标记跟随移动(逆位持久隐身 side+100:移动后立刻破隐)
 	if hidden_pieces4.has(from):
-		hidden_pieces4[to] = hidden_pieces4[from]
-		hidden_pieces4.erase(from)
+		if hidden_pieces4[from] >= 100:
+			hidden_pieces4.erase(from)
+		else:
+			hidden_pieces4[to] = hidden_pieces4[from]
+			hidden_pieces4.erase(from)
 	if hermit_active4 and not hidden_pieces4.has(to):
 		hidden_pieces4[to] = side
 		hermit_active4 = false
@@ -4716,6 +4890,11 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 	if not controlled_piece4.is_empty() and from == controlled_piece4.get("pos", Vector2i(-1, -1)):
 		controlled_piece4 = {}
 		controlled_turns4 = 0
+	# 倒吊人逆位:全控制移动的对方棋子,记录本回合已移动
+	if controlled_all_turns4 > 0 and controlled_all_owner4 == current_side4():
+		var mover_after = board[to.y][to.x]
+		if mover_after != null and mover_after["side"] != current_side4():
+			_controlled_moved4.append(from)
 	selected4 = Vector2i(-1, -1)
 	moves4 = []
 	first_moved4 = to
@@ -4735,6 +4914,10 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 		hidden_pieces4.erase(to)
 		if perks4[captured["side"]].has("emo"):
 			last_eat4 = {"side": side, "type": mover["type"]}
+		# 恶魔逆位:被吃方 2 回合内只能被该类型攻击
+		if perks4[captured["side"]].has("emo2"):
+			emo2_turns4[captured["side"]] = 2
+			emo2_type4[captured["side"]] = mover["type"]
 		_handle_capture4(captured, to, side)
 		if captured["type"] == R.Type.KING:
 			# 应用自定义规则(获胜方式/将帅被杀后处理)
@@ -4927,8 +5110,8 @@ func _handle_capture4(captured: Dictionary, captured_pos: Vector2i, attacker_sid
 	revive_count4[victim_side] += 1
 	if perks4[victim_side].has("lianren") and revive_count4[victim_side] % 2 == 0:
 		_revive_piece4(victim_side)
-	if perks4[victim_side].has("lianren2") and revive_count4[victim_side] % 5 == 0:
-		_destroy_random_enemy4(victim_side, 3)
+	if perks4[victim_side].has("lianren2") and revive_count4[victim_side] % 3 == 0:
+		_destroy_random_enemy4(victim_side, 5)
 	# 皇后/死亡:被吃充能
 	if perks4[victim_side].has("huanghou") or perks4[victim_side].has("huanghou2"):
 		queen_charge4[victim_side] = mini(queen_charge4[victim_side] + 1, 3)
@@ -5035,6 +5218,8 @@ func _expire_one_turn_effects4(side: int) -> void:
 	if invincible_piece_side4 == side:
 		invincible_piece4 = Vector2i(-1, -1)
 		invincible_piece_side4 = -1
+	if counter_side4 == side:
+		counter_side4 = -1
 
 func _begin_turn4() -> void:
 	var side := current_side4()
@@ -5044,11 +5229,32 @@ func _begin_turn4() -> void:
 		_apply_dice4(side, side)
 	if perks4[side].has("shijie2"):
 		_apply_dice4(side, _next_alive4(side))
-	# 注:隐者隐身/皇后无敌/皇帝无敌等"持续一回合"效果,改为己方移动后清除(见 _move4)
-	counter_side4 = -1
+	# 注:隐者隐身/皇后无敌/皇帝无敌/皇后逆位反制等"持续一回合"效果,改为己方移动后清除(见 _move4)
 	sync_pieces4 = []
 	hermit_active4 = hermit_pending4
 	hermit_pending4 = false
+	# 倒吊人逆位:全控制回合递减(在控制方回合开始减)
+	if controlled_all_turns4 > 0 and controlled_all_owner4 == side:
+		controlled_all_turns4 -= 1
+		_controlled_moved4 = []
+		if controlled_all_turns4 <= 0:
+			controlled_all_owner4 = -1
+	# 恶魔逆位:免疫回合递减
+	for s4 in 4:
+		if emo2_turns4[s4] > 0:
+			emo2_turns4[s4] -= 1
+			if emo2_turns4[s4] <= 0:
+				emo2_type4[s4] = -1
+	# 隐者(进阶):己方隐身子每回合每子 10% 概率破隐(逆位持久隐身标记为 side+100)
+	if not hidden_pieces4.is_empty():
+		var rng := RandomNumberGenerator.new()
+		rng.randomize()
+		var reveal4: Array[Vector2i] = []
+		for pos in hidden_pieces4:
+			if hidden_pieces4[pos] == side + 100 and rng.randf() < 0.1:
+				reveal4.append(pos)
+		for pos in reveal4:
+			hidden_pieces4.erase(pos)
 	if all_hidden_turns4[side] > 0:
 		all_hidden_turns4[side] -= 1
 		if all_hidden_turns4[side] <= 0:
@@ -5129,24 +5335,8 @@ func _next_alive4(side: int) -> int:
 func _refresh_judgement4(side: int) -> void:
 	var target := _next_alive4(side)
 	disabled_skills4[target] = ""
-	if not perks4[side].has("shenpan") and not perks4[side].has("shenpan2"):
-		return
-	if perks4[side].has("shenpan2"):
-		var enemy_ids: Array = perks4[target].keys()
-		if enemy_ids.is_empty():
-			return
-		var lost: String = enemy_ids.pick_random()
-		perks4[target].erase(lost)
-		var taken := {}
-		for s2 in 4:
-			taken.merge(perks4[s2])
-		var new_opt := Perks.draw_options(1, taken, Global.perk_pool)
-		if not new_opt.is_empty():
-			perks4[target][new_opt[0]] = true
-			_show_status4("审判:%s 失去[%s],重抽为[%s]" %  [SIDE_NAMES4[target], perks_data[lost]["name"], perks_data[new_opt[0]]["name"]])
-		else:
-			_show_status4("审判:%s 失去技能[%s]" %  [SIDE_NAMES4[target], perks_data[lost]["name"]])
-		queue_redraw()
+	# 审判逆位:被动效果(敌方不能以技能吃我方棋子),无每回合动作
+	if not perks4[side].has("shenpan"):
 		return
 	var actives: Array = []
 	for id in perks4[target]:
@@ -5223,6 +5413,8 @@ func _state_to_data4() -> Dictionary:
 		"controlled_piece4": {} if controlled_piece4.is_empty() else {"pos": [controlled_piece4["pos"].x, controlled_piece4["pos"].y], "owner": controlled_piece4["owner"]},
 		"disabled_skills4": {"0": disabled_skills4[0], "1": disabled_skills4[1], "2": disabled_skills4[2], "3": disabled_skills4[3]},
 		"last_eat4": {"side": last_eat4["side"], "type": last_eat4["type"]},
+		"emo2_turns4": {"0": emo2_turns4[0], "1": emo2_turns4[1], "2": emo2_turns4[2], "3": emo2_turns4[3]},
+		"emo2_type4": {"0": emo2_type4[0], "1": emo2_type4[1], "2": emo2_type4[2], "3": emo2_type4[3]},
 		"siwang_charge4": {"0": siwang_charge4[0], "1": siwang_charge4[1], "2": siwang_charge4[2], "3": siwang_charge4[3]},
 		"sync_pieces4": _sync_pieces_to_data4(),
 		"controlled_turns4": controlled_turns4,
@@ -5295,6 +5487,8 @@ func _apply_state_data4(data: Dictionary) -> void:
 		disabled_skills4[i] = str(data.get("disabled_skills4", {}).get(str(i), ""))
 	var le = data.get("last_eat4", {})
 	last_eat4 = {"side": int(le.get("side", -1)), "type": int(le.get("type", -1))}
+	emo2_turns4 = {0: int(data.get("emo2_turns4", {}).get("0", 0)), 1: int(data.get("emo2_turns4", {}).get("1", 0)), 2: int(data.get("emo2_turns4", {}).get("2", 0)), 3: int(data.get("emo2_turns4", {}).get("3", 0))}
+	emo2_type4 = {0: int(data.get("emo2_type4", {}).get("0", -1)), 1: int(data.get("emo2_type4", {}).get("1", -1)), 2: int(data.get("emo2_type4", {}).get("2", -1)), 3: int(data.get("emo2_type4", {}).get("3", -1))}
 	siwang_charge4 = {0: int(data.get("siwang_charge4", {}).get("0", 0)), 1: int(data.get("siwang_charge4", {}).get("1", 0)), 2: int(data.get("siwang_charge4", {}).get("2", 0)), 3: int(data.get("siwang_charge4", {}).get("3", 0))}
 	sync_pieces4 = []
 	for q in data.get("sync_pieces4", []):
@@ -5614,14 +5808,14 @@ func _skill_wheel4(perk_id: String, side: int) -> void:
 
 func _skill_hermit4(perk_id: String, side: int) -> void:
 	if perk_id == "yinzhe2":
+		# 进阶:己方所有子隐身(每回合每子 10% 概率破隐,移动后立刻破隐)
 		for r in board.size():
 			for c in board[r].size():
 				var p = board[r][c]
-				if p != null and p["type"] != R.Type.KING:
-					hidden_pieces4[Vector2i(c, r)] = p["side"]
-		all_hidden_turns4[side] = 3
+				if p != null and p["side"] == side and p["type"] != R.Type.KING:
+					hidden_pieces4[Vector2i(c, r)] = side + 100
 		_apply_skill_cd4(perk_id, side)
-		_show_status4("隐者:敌我所有子隐身三回合")
+		_show_status4("隐者:己方所有子隐身(每回合10%概率破隐,移动即破隐)")
 		queue_redraw()
 		_consume_turn_after_skill4()
 		return

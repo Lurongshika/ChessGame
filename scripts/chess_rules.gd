@@ -400,12 +400,13 @@ static func _pawn_moves(board: Array, pos: Vector2i, side: int, perks: Dictionar
 			var s2: Vector2i = pos + d
 			if in_board(s2, board):
 				moves.append(s2)
-		# 塔:过河兵可斜向前吃子(仅吃子,不能斜走空位)
-		if perks.has("ta"):
-			for d in [perp, -perp]:
-				var td: Vector2i = pos + d + fwd
-				if in_board(td, board) and not piece_at(board, td).is_empty():
-					moves.append(td)
+	# 塔:兵可从开局即可斜向前吃子(仅吃子,不能斜走空位,无过河限制)
+	if perks.has("ta"):
+		var perp2 := Vector2i(-fwd.y, fwd.x)
+		for d in [perp2, -perp2]:
+			var td: Vector2i = pos + d + fwd
+			if in_board(td, board) and not piece_at(board, td).is_empty():
+				moves.append(td)
 	return moves
 
 
