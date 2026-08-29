@@ -151,7 +151,7 @@ func _run() -> void:
 	scene._start_net_game_after_draft()
 	_check(scene.phase != scene.Phase.SKILL_DRAFT, "双方选完:离开三选一进入对局")
 
-	# --- 隐者:消耗回合后再广播,广播数据是对方回合 ---
+	# --- 隐者:指定两子隐身两回合,消耗回合后再广播 ---
 	scene.net_role = "host"
 	scene.phase = scene.Phase.PLAY
 	scene.turn = R.Side.RED
@@ -159,9 +159,26 @@ func _run() -> void:
 	scene.perks_black = {}
 	scene._setup_board()
 	scene.actions_left = 1
-	scene._skill_hermit("yinzhe", R.Side.RED)
-	_check(scene.turn == R.Side.RED, "隐者:释放后不跳过回合(仍可走子)")
-	_check(int(scene._state_to_data()["turn"]) == R.Side.RED, "隐者:广播状态仍为红方回合")
+	scene.hidden_pieces = {}
+	scene.hidden_turns = {}
+	var ha := Vector2i(0, 6)  # 红兵
+	var hb := Vector2i(2, 6)
+	scene._apply_hermit_target(ha, hb, R.Side.RED)
+	_check(scene.hidden_pieces.has(ha) and scene.hidden_pieces.has(hb), "隐者:两子获得隐身标记")
+	_check(scene.hidden_turns.get(ha, 0) == 2 and scene.hidden_turns.get(hb, 0) == 2, "隐者:隐身持续2回合")
+	# 己方移动一次后递减为 1(仍隐身),再移动一次后显形
+	scene._expire_one_turn_effects(R.Side.RED)
+	_check(scene.hidden_turns.get(ha, 0) == 1 and scene.hidden_pieces.has(ha), "隐者:1回合后仍隐身")
+	scene._expire_one_turn_effects(R.Side.RED)
+	_check(not scene.hidden_pieces.has(ha), "隐者:2回合后显形")
+	# 释放目标型技能消耗本回合(行为与皇帝一致)
+	scene.actions_left = 1
+	scene.turn = R.Side.RED
+	scene._apply_hermit_target(ha, hb, R.Side.RED)
+	scene._apply_skill_cd("yinzhe", R.Side.RED)
+	scene._consume_turn_after_skill()
+	_check(scene.turn == R.Side.BLACK, "隐者:指定两子后消耗回合轮到对方")
+	_check(int(scene._state_to_data()["turn"]) == R.Side.BLACK, "隐者:广播状态为对方回合")
 
 	# --- 命运之轮(正位):释放后不跳过回合 ---
 	scene.net_role = "host"
@@ -478,8 +495,9 @@ func _run() -> void:
 		"siwang": true,
 		"zhanche": false, "zhanche2": false,  # 战车已改为被动(整局走法强化)
 		"diaodiao": true,
-		# 非目标型(直接发请求,host 端执行):隐者/倒吊人逆位/女祭司/愚者等
-		"yinzhe": false, "yinzhe2": false,
+		"yinzhe": true,  # 隐者已改为指定两子(目标型)
+		# 非目标型(直接发请求,host 端执行):隐者逆位/倒吊人逆位/女祭司/愚者等
+		"yinzhe2": false,
 		"diaodiao2": false,
 		"nvjisi": false, "yuzhe": false,
 	}

@@ -55,6 +55,7 @@ var last_eat := {"side": -1, "type": -1}  # 恶魔:上次吃子方与类型(禁�
 var emo2_turns := {0: 0, 1: 0}  # 恶魔逆位:被吃方剩余免疫回合数
 var emo2_type := {0: -1, 1: -1}  # 恶魔逆位:被吃方的"吃它类型"(该类型可再吃,其他类型免疫)
 var all_hidden_turns := {0: 0, 1: 0}  # 隐者(进阶):全员隐身剩余回合数
+var hidden_turns := {}                # 隐者(普通):指定棋子剩余隐身回合数 -> {pos: 剩余}
 var skip_next_turn := {0: false, 1: false}  # 节制(进阶):下回合被跳过
 var invincible_piece := Vector2i(-1, -1)  # 皇帝:指定无敌的己方棋子
 var invincible_piece_side := -1    # 皇帝:无敌棋子所属方(用于"己方移动后清除")
@@ -93,6 +94,7 @@ var last_eat4 := {"side": -1, "type": -1}
 var emo2_turns4 := {0: 0, 1: 0, 2: 0, 3: 0}  # 四人:恶魔逆位被吃方免疫剩余回合
 var emo2_type4 := {0: -1, 1: -1, 2: -1, 3: -1}  # 四人:恶魔逆位被吃方的"吃它类型"
 var all_hidden_turns4 := {0: 0, 1: 0, 2: 0, 3: 0}
+var hidden_turns4 := {}                # 四人:隐者(普通)指定棋子剩余隐身回合数 -> {pos: 剩余}
 var skip_next_turn4 := {0: false, 1: false, 2: false, 3: false}
 var invincible_piece4 := Vector2i(-1, -1)
 var invincible_piece_side4 := -1  # 四人:皇帝无敌棋子所属方(用于"己方移动后清除")
@@ -700,13 +702,13 @@ func _activate_skill4(perk_id: String, side: int) -> void:
 			_skill_queen4(perk_id, side)
 		"mingyun", "mingyun2":
 			_skill_wheel4(perk_id, side)
-		"yinzhe", "yinzhe2":
+		"yinzhe2":
 			_skill_hermit4(perk_id, side)
 		"zhengyi2":
 			_skill_justice2_4(side)
 		"siwang2":
 			_skill_death2_4(side)
-		"moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "diaodiao":
+		"moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "diaodiao", "yinzhe":
 			_start_targeting4(perk_id, side)
 		"diaodiao2":
 			# 逆位:跳过本回合,下回合起获得其他所有方棋子控制权三回合
@@ -794,6 +796,8 @@ func _start_targeting4(perk_id: String, side: int) -> void:
 			_show_status4("选择己方一枚棋子(摧毁敌我同类型)")
 		"diaodiao", "diaodiao2":
 			_show_status4("选择要控制的对方棋子")
+		"yinzhe":
+			_show_status4("选择第一枚要隐身的己方棋子")
 		_:
 			_show_status4("选择目标:请点击棋盘上的棋子")
 	queue_redraw()
@@ -815,6 +819,8 @@ func _handle_target_click4(pos: Vector2i) -> void:
 			_handle_death_target4(pos, side)
 		"diaodiao", "diaodiao2":
 			_handle_puppet_target4(pos, side, perk_id)
+		"yinzhe":
+			_handle_hermit_target4(pos, side)
 		_:
 			_done_targeting4()
 	queue_redraw()
@@ -909,6 +915,42 @@ func _handle_king_counter4(pos: Vector2i, side: int) -> void:
 	_show_skill_announce("huangdi2", side)
 	queue_redraw()
 	_consume_turn_after_skill4()
+
+
+# 隐者(普通):指定两子隐身两回合(四人版,分两步选己方两子)
+func _handle_hermit_target4(pos: Vector2i, side: int) -> void:
+	var p = board[pos.y][pos.x]
+	if p == null or p["side"] != side:
+		_show_status4("请选择己方棋子")
+		return
+	if targeting4["stage"] == 1:
+		targeting4["data"]["a"] = pos
+		targeting4["stage"] = 2
+		_show_status4("再选择第二枚要隐身的己方棋子")
+		return
+	var a: Vector2i = targeting4["data"]["a"]
+	if pos == a:
+		_show_status4("不能与自身相同")
+		return
+	if net_role != "local" and Global.from_lobby and net_role == "client":
+		targeting4["data"]["b"] = pos
+		_done_targeting4()
+		return
+	_apply_hermit_target4(a, pos, side)
+	_done_targeting4()
+	_apply_skill_cd4("yinzhe", side)
+	_show_status4("隐者:指定两子隐身两回合")
+	_show_skill_announce("yinzhe", side)
+	queue_redraw()
+	_consume_turn_after_skill4()
+
+
+# 隐者(普通):两子标记为隐身 2 回合(四人版,side+200 = 指定两子隐身)
+func _apply_hermit_target4(a: Vector2i, b: Vector2i, side: int) -> void:
+	hidden_pieces4[a] = side + 200
+	hidden_turns4[a] = 2
+	hidden_pieces4[b] = side + 200
+	hidden_turns4[b] = 2
 
 
 func _handle_death_target4(pos: Vector2i, side: int) -> void:
@@ -1050,6 +1092,8 @@ func _done_targeting4() -> void:
 			params = {"pos": [data.get("target", Vector2i(-1, -1)).x, data.get("target", Vector2i(-1, -1)).y]}
 		elif perk == "diaodiao" or perk == "diaodiao2":
 			params = {"pos": [data.get("target", Vector2i(-1, -1)).x, data.get("target", Vector2i(-1, -1)).y]}
+		elif perk == "yinzhe":
+			params = {"a": [data.get("a", Vector2i(-1, -1)).x, data.get("a", Vector2i(-1, -1)).y], "b": [data.get("b", Vector2i(-1, -1)).x, data.get("b", Vector2i(-1, -1)).y]}
 		request_skill4.rpc_id(1, perk, params)
 		_show_status4("技能已发送,等待同步")
 
@@ -2138,6 +2182,9 @@ func _state_to_data() -> Dictionary:
 	var hidden: Array = []
 	for pos in hidden_pieces:
 		hidden.append([pos.x, pos.y, int(hidden_pieces[pos])])
+	var h_turns: Array = []
+	for pos in hidden_turns:
+		h_turns.append([pos.x, pos.y, int(hidden_turns[pos])])
 	var cds := {}
 	for s in skill_cd:
 		cds[str(s)] = skill_cd[s].duplicate()
@@ -2158,6 +2205,7 @@ func _state_to_data() -> Dictionary:
 		"extra_turn": {"0": extra_turn[0], "1": extra_turn[1]},
 		"suicide_mark": {} if suicide_mark.is_empty() else {"pos": [suicide_mark["pos"].x, suicide_mark["pos"].y], "side": suicide_mark["side"]},
 		"hidden_pieces": hidden,
+		"hidden_turns": h_turns,
 		"invincible_side": invincible_side,
 		"invincible_side_turns": invincible_side_turns,
 		"extra_move": {"0": extra_move[0], "1": extra_move[1]},
@@ -2243,6 +2291,9 @@ func _apply_state_data(data: Dictionary) -> void:
 	hidden_pieces = {}
 	for h in data["hidden_pieces"]:
 		hidden_pieces[Vector2i(int(h[0]), int(h[1]))] = int(h[2])
+	hidden_turns = {}
+	for ht in data.get("hidden_turns", []):
+		hidden_turns[Vector2i(int(ht[0]), int(ht[1]))] = int(ht[2])
 	invincible_side = int(data["invincible_side"])
 	invincible_side_turns = int(data.get("invincible_side_turns", 0))
 	extra_move = {0: bool(data.get("extra_move", {}).get("0", false)), 1: bool(data.get("extra_move", {}).get("1", false))}
@@ -2354,8 +2405,20 @@ func _apply_net_skill(perk_id: String, params: Dictionary) -> void:
 			_skill_queen(perk_id, side)
 		"mingyun", "mingyun2":
 			_skill_wheel(perk_id, side)
-		"yinzhe", "yinzhe2":
+		"yinzhe2":
 			_skill_hermit(perk_id, side)
+		"yinzhe":
+			# 隐者(普通):指定两子隐身两回合
+			var ha := Vector2i(int(params["a"][0]), int(params["a"][1]))
+			var hb := Vector2i(int(params["b"][0]), int(params["b"][1]))
+			var pa = board[ha.y][ha.x]
+			var pb = board[hb.y][hb.x]
+			if pa == null or pa["side"] != side or pb == null or pb["side"] != side or ha == hb:
+				return
+			_apply_hermit_target(ha, hb, side)
+			_apply_skill_cd("yinzhe", side)
+			status_label.text = "隐者:指定两子隐身两回合"
+			_consume_turn_after_skill()
 		"zhengyi2":
 			_skill_justice2(side)
 		"siwang2":
@@ -3346,6 +3409,7 @@ func _apply_dice(side: int, target_side: int) -> void:
 # 隐者(进阶):清除全员隐身标记
 func _clear_all_hidden() -> void:
 	hidden_pieces.clear()
+	hidden_turns.clear()
 	queue_redraw()
 
 
@@ -3412,12 +3476,18 @@ func _turn_action_cap() -> int:
 # 说明:效果从释放开始覆盖"对方完整回合 + 己方回合直到移动",己方移动一步后到期
 func _expire_one_turn_effects(side: int) -> void:
 	# 隐者:己方标记的一回合隐身子在己方移动后显形(逆位持久隐身 side+100 不受影响)
+	# 隐者(普通)指定两子:标记为 side+200,剩余回合数递减,归零才显形
 	var hidden_rm: Array[Vector2i] = []
 	for pos in hidden_pieces:
 		if hidden_pieces[pos] == side:
 			hidden_rm.append(pos)
+		elif hidden_pieces[pos] == side + 200:
+			hidden_turns[pos] -= 1
+			if hidden_turns[pos] <= 0:
+				hidden_rm.append(pos)
 	for pos in hidden_rm:
 		hidden_pieces.erase(pos)
+		hidden_turns.erase(pos)
 	# 皇后无敌:己方移动后递减(持续2回合)
 	if invincible_side == side:
 		invincible_side_turns -= 1
@@ -3456,13 +3526,18 @@ func _perform_move(from: Vector2i, to: Vector2i) -> void:
 	})
 	Global.play_sfx("move_chess", -6.0)
 	# 隐者:隐身标记跟随棋子移动(己方移动被标记的隐身棋子时)
-	# 逆位持久隐身(side+100):移动后立刻破隐
+	# 逆位持久隐身(side+100):移动后立刻破隐;普通指定两子(side+200)跟随移动并转移剩余回合
 	if hidden_pieces.has(from):
-		if hidden_pieces[from] >= 100:
+		var hv: int = hidden_pieces[from]
+		if hv >= 100 and hv < 200:
 			hidden_pieces.erase(from)
+			hidden_turns.erase(from)
 		else:
-			hidden_pieces[to] = hidden_pieces[from]
+			hidden_pieces[to] = hv
 			hidden_pieces.erase(from)
+			if hidden_turns.has(from):
+				hidden_turns[to] = hidden_turns[from]
+				hidden_turns.erase(from)
 	# 隐者:下回合移动的子隐身(激活一次)
 	if hermit_active and not hidden_pieces.has(to):
 		hidden_pieces[to] = turn
@@ -3478,6 +3553,7 @@ func _perform_move(from: Vector2i, to: Vector2i) -> void:
 			_controlled_moved.append(from)
 	if captured != null:
 		hidden_pieces.erase(to)  # 吃掉目标位置的隐身子时,清除其隐身标记
+		hidden_turns.erase(to)
 		# 吃子特效:屏幕震动 + 被吃子粒子破碎 + 音效(与四人一致)
 		Global.play_sfx("kill", -4.0)
 		_shake_time = 0.3
@@ -4253,7 +4329,7 @@ func _on_perk_clicked(perk_id: String, side: int) -> void:
 
 
 func _is_targeting_skill(perk_id: String) -> bool:
-	return perk_id in ["moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "diaodiao"]
+	return perk_id in ["moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "diaodiao", "yinzhe"]
 
 
 func _is_active_skill(perk_id: String) -> bool:
@@ -4349,13 +4425,13 @@ func _activate_skill(perk_id: String, side: int) -> void:
 			_skill_queen(perk_id, side)
 		"mingyun", "mingyun2":
 			_skill_wheel(perk_id, side)
-		"yinzhe", "yinzhe2":
+		"yinzhe2":
 			_skill_hermit(perk_id, side)
 		"zhengyi2":
 			_skill_justice2(side)
 		"siwang2":
 			_skill_death2(side)
-		"moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "diaodiao":
+		"moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "diaodiao", "yinzhe":
 			_start_targeting(perk_id, side)
 		"diaodiao2":
 			# 逆位:跳过本回合,下回合起获得所有对方棋子控制权三回合
@@ -4633,6 +4709,8 @@ func _start_targeting(perk_id: String, side: int) -> void:
 			status_label.text = "选择己方一枚棋子(摧毁敌我同类型)"
 		"diaodiao", "diaodiao2":
 			status_label.text = "选择要控制的对方棋子"
+		"yinzhe":
+			status_label.text = "选择第一枚要隐身的己方棋子"
 		_:
 			status_label.text = "选择目标:请点击棋盘上的棋子"
 
@@ -4653,6 +4731,8 @@ func _handle_target_click(pos: Vector2i) -> void:
 			_handle_death_target(pos, side)
 		"diaodiao", "diaodiao2":
 			_handle_puppet_target(pos, side, perk_id)
+		"yinzhe":
+			_handle_hermit_target(pos, side)
 		_:
 			_done_targeting()
 	queue_redraw()
@@ -4794,6 +4874,47 @@ func _handle_puppet_target(pos: Vector2i, side: int, perk_id: String) -> void:
 		notify_skill_used.rpc(perk_id, side)
 		_consume_turn_after_skill()
 		_broadcast_state()
+
+
+# 隐者(普通):指定两子隐身两回合(分两步选己方两子)
+func _handle_hermit_target(pos: Vector2i, side: int) -> void:
+	var p = board[pos.y][pos.x]
+	if p == null or p["side"] != side:
+		status_label.text = "请选择己方棋子"
+		return
+	if targeting["stage"] == 1:
+		targeting["data"]["a"] = pos
+		targeting["stage"] = 2
+		status_label.text = "再选择第二枚要隐身的己方棋子"
+		return
+	var a: Vector2i = targeting["data"]["a"]
+	if pos == a:
+		status_label.text = "不能与自身相同"
+		return
+	if net_role == "client":
+		_done_targeting()
+		request_skill.rpc_id(1, "yinzhe", {"a": [a.x, a.y], "b": [pos.x, pos.y]})
+		status_label.text = "隐者:技能已发送,等待同步"
+		return
+	_apply_hermit_target(a, pos, side)
+	_done_targeting()
+	_apply_skill_cd("yinzhe", side)
+	status_label.text = "隐者:指定两子隐身两回合"
+	_show_skill_announce("yinzhe", side)
+	_refresh_move_log()
+	queue_redraw()
+	if net_role == "host":
+		notify_skill_used.rpc("yinzhe", side)
+		_consume_turn_after_skill()
+		_broadcast_state()
+
+
+# 隐者(普通):两子标记为隐身 2 回合(side+200 = 指定两子隐身,剩余回合存 hidden_turns)
+func _apply_hermit_target(a: Vector2i, b: Vector2i, side: int) -> void:
+	hidden_pieces[a] = side + 200
+	hidden_turns[a] = 2
+	hidden_pieces[b] = side + 200
+	hidden_turns[b] = 2
 
 
 func _handle_chariot_target(pos: Vector2i, side: int, perk_id: String) -> void:
@@ -5828,13 +5949,18 @@ func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 		"dur": 0.22,
 	})
 	Global.play_sfx("move_chess", -6.0)
-	# 隐者:隐身标记跟随移动(逆位持久隐身 side+100:移动后立刻破隐)
+	# 隐者:隐身标记跟随移动(逆位持久隐身 side+100:移动后立刻破隐;普通指定两子 side+200 跟随并转移剩余回合)
 	if hidden_pieces4.has(from):
-		if hidden_pieces4[from] >= 100:
+		var hv4: int = hidden_pieces4[from]
+		if hv4 >= 100 and hv4 < 200:
 			hidden_pieces4.erase(from)
+			hidden_turns4.erase(from)
 		else:
-			hidden_pieces4[to] = hidden_pieces4[from]
+			hidden_pieces4[to] = hv4
 			hidden_pieces4.erase(from)
+			if hidden_turns4.has(from):
+				hidden_turns4[to] = hidden_turns4[from]
+				hidden_turns4.erase(from)
 	if hermit_active4 and not hidden_pieces4.has(to):
 		hidden_pieces4[to] = side
 		hermit_active4 = false
@@ -5865,6 +5991,7 @@ func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 		# 吃子特效:屏幕震动 + 被吃子粒子破碎
 		_trigger_capture_effect4(captured, to)
 		hidden_pieces4.erase(to)
+		hidden_turns4.erase(to)
 		if perks4[captured["side"]].has("emo"):
 			last_eat4 = {"side": side, "type": mover["type"]}
 		# 恶魔逆位:被吃方 2 回合内只能被该类型攻击
@@ -6218,8 +6345,13 @@ func _expire_one_turn_effects4(side: int) -> void:
 	for pos in hidden_pieces4:
 		if hidden_pieces4[pos] == side:
 			hidden_rm.append(pos)
+		elif hidden_pieces4[pos] == side + 200:
+			hidden_turns4[pos] -= 1
+			if hidden_turns4[pos] <= 0:
+				hidden_rm.append(pos)
 	for pos in hidden_rm:
 		hidden_pieces4.erase(pos)
+		hidden_turns4.erase(pos)
 	if invincible_side4 == side:
 		invincible_side_turns4 -= 1
 		if invincible_side_turns4 <= 0:
@@ -6446,6 +6578,9 @@ func _state_to_data4() -> Dictionary:
 	var hidden: Array = []
 	for pos in hidden_pieces4:
 		hidden.append([pos.x, pos.y, int(hidden_pieces4[pos])])
+	var h_turns4: Array = []
+	for pos in hidden_turns4:
+		h_turns4.append([pos.x, pos.y, int(hidden_turns4[pos])])
 	var cds := {}
 	for s in skill_cd4:
 		cds[str(s)] = skill_cd4[s].duplicate()
@@ -6471,6 +6606,7 @@ func _state_to_data4() -> Dictionary:
 		"all_hidden_turns4": {"0": all_hidden_turns4[0], "1": all_hidden_turns4[1], "2": all_hidden_turns4[2], "3": all_hidden_turns4[3]},
 		"suicide_mark4": {} if suicide_mark4.is_empty() else {"pos": [suicide_mark4["pos"].x, suicide_mark4["pos"].y], "side": suicide_mark4["side"]},
 		"hidden_pieces4": hidden,
+		"hidden_turns4": h_turns4,
 		"invincible_side4": invincible_side4,
 		"invincible_side_turns4": invincible_side_turns4,
 		"invincible_piece4": [invincible_piece4.x, invincible_piece4.y],
@@ -6551,6 +6687,9 @@ func _apply_state_data4(data: Dictionary) -> void:
 	hidden_pieces4 = {}
 	for h in data["hidden_pieces4"]:
 		hidden_pieces4[Vector2i(int(h[0]), int(h[1]))] = int(h[2])
+	hidden_turns4 = {}
+	for ht in data.get("hidden_turns4", []):
+		hidden_turns4[Vector2i(int(ht[0]), int(ht[1]))] = int(ht[2])
 	invincible_side4 = int(data["invincible_side4"])
 	invincible_side_turns4 = int(data.get("invincible_side_turns4", 0))
 	invincible_piece4 = Vector2i(int(data["invincible_piece4"][0]), int(data["invincible_piece4"][1]))
@@ -6790,6 +6929,22 @@ func _execute_skill4(perk_id: String, side: int, params: Dictionary) -> void:
 				_consume_turn_after_skill4()
 				queue_redraw()
 				return
+	# 隐者(普通):指定两子隐身两回合(a/b 参数)
+	if perk_id == "yinzhe" and params.has("a") and params.has("b"):
+		var ha := Vector2i(int(params["a"][0]), int(params["a"][1]))
+		var hb := Vector2i(int(params["b"][0]), int(params["b"][1]))
+		var pa = board[ha.y][ha.x]
+		var pb = board[hb.y][hb.x]
+		if pa == null or pa["side"] != side or pb == null or pb["side"] != side or ha == hb:
+			return
+		_apply_hermit_target4(ha, hb, side)
+		_apply_skill_cd4("yinzhe", side)
+		_record_skill4(side, "yinzhe")
+		notify_skill_used4.rpc("yinzhe", side)
+		_show_status4("隐者:指定两子隐身两回合")
+		_consume_turn_after_skill4()
+		queue_redraw()
+		return
 	# 非目标型或未走目标分支
 	if not _is_targeting_skill(perk_id):
 		_activate_skill4(perk_id, side)

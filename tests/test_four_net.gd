@@ -144,6 +144,35 @@ func _run() -> void:
 	_check(game.in_check4[R.Side.RED], "四人被将:客户端收到广播后被将状态保留")
 	_check(game.board[8][8] != null and game.board[8][8]["side"] == R.Side.RED, "四人被将:广播后棋盘恢复(含王)")
 
+	# --- 四人隐者(普通):指定两子隐身两回合,目标选择 + 状态广播往返 ---
+	game.four_mode = true
+	game.net_role = "local"
+	game.my_side4 = -1
+	game.board = R.make_board4()
+	game.perks4 = {0: {"yinzhe": true}, 1: {}, 2: {}, 3: {}}
+	game.hidden_pieces4 = {}
+	game.hidden_turns4 = {}
+	game.skill_cd4 = {0: {}, 1: {}, 2: {}, 3: {}}
+	# 红方在 (4,13)/(6,13) 两枚兵,直接调用目标选择
+	game.targeting4 = {"perk": "yinzhe", "side": 0, "stage": 1, "data": {}}
+	game._handle_hermit_target4(Vector2i(4, 13), 0)
+	_check(game.targeting4["stage"] == 2, "四人隐者:第一步选中第一子进入第二步")
+	game._handle_hermit_target4(Vector2i(6, 13), 0)
+	_check(game.targeting4.is_empty(), "四人隐者:两步选完退出目标选择")
+	_check(game.hidden_pieces4.has(Vector2i(4, 13)) and game.hidden_pieces4.has(Vector2i(6, 13)), "四人隐者:两子获得隐身标记")
+	_check(game.hidden_turns4.get(Vector2i(4, 13), 0) == 2, "四人隐者:隐身持续2回合")
+	# 状态广播往返:隐者标记与剩余回合同步
+	var hd = game._state_to_data4()
+	game.hidden_pieces4 = {}
+	game.hidden_turns4 = {}
+	game._apply_state_data4(hd)
+	_check(game.hidden_pieces4.size() == 2 and game.hidden_turns4.size() == 2, "四人隐者:广播后两子隐身标记+回合数保留")
+	# 走子后递减:一回合后仍隐身,两回合后显形
+	game._expire_one_turn_effects4(0)
+	_check(game.hidden_turns4.get(Vector2i(4, 13), 0) == 1 and game.hidden_pieces4.has(Vector2i(4, 13)), "四人隐者:1回合后仍隐身")
+	game._expire_one_turn_effects4(0)
+	_check(not game.hidden_pieces4.has(Vector2i(4, 13)), "四人隐者:2回合后显形")
+
 	# --- 四人隐者逆位:隐身标记生效 + 联机视角可见性 ---
 	game.four_mode = true
 	game.net_role = "host"
