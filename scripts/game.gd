@@ -55,6 +55,7 @@ var last_eat := {"side": -1, "type": -1}  # 恶魔:上次吃子方与类型(禁�
 var all_hidden_turns := {0: 0, 1: 0}  # 隐者(进阶):全员隐身剩余回合数
 var skip_next_turn := {0: false, 1: false}  # 节制(进阶):下回合被跳过
 var invincible_piece := Vector2i(-1, -1)  # 皇帝:指定无敌的己方棋子
+var invincible_piece_side := -1    # 皇帝:无敌棋子所属方(用于"己方移动后清除")
 var counter_side := -1          # 皇后(进阶):反制方(该方棋子被吃时同归于尽)
 var siwang_charge := {0: 0, 1: 0}  # 死亡:被吃充能(己方每被吃 1 子 +1)
 var sync_pieces: Array = []     # 命运之轮(进阶):协同棋子(移动不消耗步数)
@@ -82,6 +83,7 @@ var last_eat4 := {"side": -1, "type": -1}
 var all_hidden_turns4 := {0: 0, 1: 0, 2: 0, 3: 0}
 var skip_next_turn4 := {0: false, 1: false, 2: false, 3: false}
 var invincible_piece4 := Vector2i(-1, -1)
+var invincible_piece_side4 := -1  # 四人:皇帝无敌棋子所属方(用于"己方移动后清除")
 var counter_side4 := -1
 var siwang_charge4 := {0: 0, 1: 0, 2: 0, 3: 0}
 var sync_pieces4: Array = []
@@ -806,6 +808,7 @@ func _handle_king_guard4(pos: Vector2i, side: int) -> void:
 		_done_targeting4()
 		return
 	invincible_piece4 = pos
+	invincible_piece_side4 = side
 	_apply_skill_cd4("huangdi", side)
 	_done_targeting4()
 	_show_status4("皇帝:该子本回合无敌")
@@ -1723,6 +1726,7 @@ func _state_to_data() -> Dictionary:
 		"perks_red": perks_red,
 		"perks_black": perks_black,
 		"invincible_piece": [invincible_piece.x, invincible_piece.y],
+		"invincible_piece_side": invincible_piece_side,
 		"counter_side": counter_side,
 		"siwang_charge": {"0": siwang_charge[0], "1": siwang_charge[1]},
 		"sync_pieces": _sync_pieces_to_data(),
@@ -1798,6 +1802,7 @@ func _apply_state_data(data: Dictionary) -> void:
 		perks_black = data["perks_black"]
 	var ip = data.get("invincible_piece", [-1, -1])
 	invincible_piece = Vector2i(int(ip[0]), int(ip[1]))
+	invincible_piece_side = int(data.get("invincible_piece_side", -1))
 	counter_side = int(data.get("counter_side", -1))
 	siwang_charge = {0: int(data.get("siwang_charge", {}).get("0", 0)), 1: int(data.get("siwang_charge", {}).get("1", 0))}
 	sync_pieces = []
@@ -1898,6 +1903,7 @@ func _apply_net_skill(perk_id: String, params: Dictionary) -> void:
 			if p == null or p["side"] != side:
 				return
 			invincible_piece = pos
+			invincible_piece_side = side
 			_apply_skill_cd("huangdi", side)
 			status_label.text = "皇帝:该子本回合无敌"
 			_consume_turn_after_skill()
@@ -2644,22 +2650,12 @@ func _begin_turn() -> void:
 		_apply_dice(turn, turn)
 	if perks_of(turn).has("shijie2"):
 		_apply_dice(turn, 1 - turn)
-	# 隐者:己方标记的隐身,在己方回合开始时清除(持续一个完整回合,对方回合期间生效)
-	var hidden_remove: Array[Vector2i] = []
-	for pos in hidden_pieces:
-		if hidden_pieces[pos] == turn:
-			hidden_remove.append(pos)
-	for pos in hidden_remove:
-		hidden_pieces.erase(pos)
-	# 皇后无敌:己方回合开始清除(释放后覆盖对方的一整个回合)
-	if invincible_side == turn:
-		invincible_side = -1
-	invincible_piece = Vector2i(-1, -1)
-	counter_side = -1
-	sync_pieces = []
 	# 隐者:下回合(己方回合)移动的子隐身
 	hermit_active = hermit_pending
 	hermit_pending = false
+	# 注:隐者隐身/皇后无敌/皇帝无敌等"持续一回合"效果,改为己方移动后清除(见 _perform_move)
+	counter_side = -1
+	sync_pieces = []
 	# 隐者(进阶):全员隐身倒计时
 	if all_hidden_turns[turn] > 0:
 		all_hidden_turns[turn] -= 1
@@ -2795,6 +2791,26 @@ func _turn_action_cap() -> int:
 	return n
 
 
+# "持续一回合"效果在己方移动后清除:
+# 隐者隐身(己方标记的)/皇后无敌(己方释放的)/皇帝无敌(己方指定的一子)
+# 说明:效果从释放开始覆盖"对方完整回合 + 己方回合直到移动",己方移动一步后到期
+func _expire_one_turn_effects(side: int) -> void:
+	# 隐者:己方标记的隐身子在己方移动后显形
+	var hidden_rm: Array[Vector2i] = []
+	for pos in hidden_pieces:
+		if hidden_pieces[pos] == side:
+			hidden_rm.append(pos)
+	for pos in hidden_rm:
+		hidden_pieces.erase(pos)
+	# 皇后无敌:己方移动后结束
+	if invincible_side == side:
+		invincible_side = -1
+	# 皇帝无敌:己方移动后结束(指定的一子)
+	if invincible_piece_side == side:
+		invincible_piece = Vector2i(-1, -1)
+		invincible_piece_side = -1
+
+
 func _perform_move(from: Vector2i, to: Vector2i) -> void:
 	_record_move(from, to, "move")
 	var res := R.apply_move(board, from, to)
@@ -2831,6 +2847,8 @@ func _perform_move(from: Vector2i, to: Vector2i) -> void:
 	# 命运之轮(进阶):协同棋子移动不消耗步数
 	if not from in sync_pieces:
 		actions_left -= 1
+	# "持续一回合"效果在己方移动后清除(隐者隐身/皇后无敌/皇帝无敌)
+	_expire_one_turn_effects(turn)
 	# 记录该步执行后的棋盘(含被动技能效果),供复盘/悔棋还原
 	_snapshot_last_board()
 	queue_redraw()
@@ -3919,6 +3937,7 @@ func _handle_king_guard(pos: Vector2i, side: int) -> void:
 		status_label.text = "皇帝:技能已发送,等待同步"
 		return
 	invincible_piece = pos
+	invincible_piece_side = side
 	_apply_skill_cd("huangdi", side)
 	_done_targeting()
 	status_label.text = "皇帝:该子本回合无敌"
@@ -4731,6 +4750,8 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 	# 命运之轮(进阶):协同棋子移动不消耗步数
 	if not from in sync_pieces4:
 		actions_left4 -= 1
+	# "持续一回合"效果在己方移动后清除(隐者隐身/皇后无敌/皇帝无敌)
+	_expire_one_turn_effects4(side)
 	queue_redraw()
 	if actions_left4 <= 0:
 		_end_turn4()
@@ -5001,6 +5022,20 @@ func _turn_info4(side: int) -> String:
 
 # ==================== 四人回合状态机(复制双人逻辑,吃王获胜无将军) ====================
 
+# "持续一回合"效果在己方移动后清除(四人版,复制双人逻辑)
+func _expire_one_turn_effects4(side: int) -> void:
+	var hidden_rm: Array[Vector2i] = []
+	for pos in hidden_pieces4:
+		if hidden_pieces4[pos] == side:
+			hidden_rm.append(pos)
+	for pos in hidden_rm:
+		hidden_pieces4.erase(pos)
+	if invincible_side4 == side:
+		invincible_side4 = -1
+	if invincible_piece_side4 == side:
+		invincible_piece4 = Vector2i(-1, -1)
+		invincible_piece_side4 = -1
+
 func _begin_turn4() -> void:
 	var side := current_side4()
 	for id in skill_cd4[side].keys():
@@ -5009,15 +5044,7 @@ func _begin_turn4() -> void:
 		_apply_dice4(side, side)
 	if perks4[side].has("shijie2"):
 		_apply_dice4(side, _next_alive4(side))
-	var hidden_remove: Array[Vector2i] = []
-	for pos in hidden_pieces4:
-		if hidden_pieces4[pos] == side:
-			hidden_remove.append(pos)
-	for pos in hidden_remove:
-		hidden_pieces4.erase(pos)
-	if invincible_side4 == side:
-		invincible_side4 = -1
-	invincible_piece4 = Vector2i(-1, -1)
+	# 注:隐者隐身/皇后无敌/皇帝无敌等"持续一回合"效果,改为己方移动后清除(见 _move4)
 	counter_side4 = -1
 	sync_pieces4 = []
 	hermit_active4 = hermit_pending4
@@ -5189,6 +5216,7 @@ func _state_to_data4() -> Dictionary:
 		"hidden_pieces4": hidden,
 		"invincible_side4": invincible_side4,
 		"invincible_piece4": [invincible_piece4.x, invincible_piece4.y],
+		"invincible_piece_side4": invincible_piece_side4,
 		"counter_side4": counter_side4,
 		"hermit_pending4": hermit_pending4,
 		"hermit_active4": hermit_active4,
@@ -5253,6 +5281,7 @@ func _apply_state_data4(data: Dictionary) -> void:
 		hidden_pieces4[Vector2i(int(h[0]), int(h[1]))] = int(h[2])
 	invincible_side4 = int(data["invincible_side4"])
 	invincible_piece4 = Vector2i(int(data["invincible_piece4"][0]), int(data["invincible_piece4"][1]))
+	invincible_piece_side4 = int(data.get("invincible_piece_side4", -1))
 	counter_side4 = int(data.get("counter_side4", -1))
 	hermit_pending4 = bool(data.get("hermit_pending4", false))
 	hermit_active4 = bool(data.get("hermit_active4", false))
@@ -5393,6 +5422,7 @@ func _execute_skill4(perk_id: String, side: int, params: Dictionary) -> void:
 				if p1 == null or p1["side"] != side:
 					return
 				invincible_piece4 = pos
+				invincible_piece_side4 = side
 				_apply_skill_cd4("huangdi", side)
 				_show_status4("皇帝:该子本回合无敌")
 				_consume_turn_after_skill4()
