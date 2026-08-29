@@ -196,6 +196,38 @@ func _run() -> void:
 	game._move4(Vector2i(4, 12), Vector2i(4, 11), "move")
 	_check(game.turn4 != 2, "四人命运之轮:第 2 步后回合结束(共 2 次行动)")
 
+	# --- 四人 AI 走子:避开被审判逆位驳回的技能增强吃子(否则 AI 卡住) ---
+	game.board = []
+	for rr in 17:
+		var row := []
+		for cc in 17:
+			row.append(null)
+		game.board.append(row)
+	game.board[6][4] = R.make_piece(R.Side.BLACK, R.Type.PAWN)   # 黑兵 (4,6)
+	game.board[5][4] = R.make_piece(R.Side.RED, R.Type.PAWN)     # 红兵 (4,5) 正前方
+	game.board[5][3] = R.make_piece(R.Side.RED, R.Type.KING)     # 红将 (3,5)
+	game.perks4 = {
+		0: {"shenpan2": true},  # 红方审判逆位
+		1: {"ta2": true},       # 黑方塔逆位(八向移动一格=可吃正前方,但被审判禁)
+		2: {}, 3: {},
+	}
+	game.turn4 = 0  # 黑方回合(0 索引 = side 1)
+	game.alive4 = {0: true, 1: true, 2: true, 3: true}
+	game.winner4 = -1
+	var perks_arr_ai: Array = [game.perks4[0], game.perks4[1], game.perks4[2], game.perks4[3]]
+	var mv_ai: Dictionary = game._choose_ai_move4(1, perks_arr_ai)
+	var ai_avoids_shenpan := true
+	if not mv_ai.is_empty():
+		var cap_ai = game.board[mv_ai["to"].y][mv_ai["to"].x]
+		if cap_ai != null and game.perks4[cap_ai["side"]].has("shenpan2"):
+			var pure_ok := false
+			for pm in R.raw_moves4(game.board, mv_ai["from"], [{}, {}, {}, {}]):
+				if pm == mv_ai["to"]:
+					pure_ok = true
+					break
+			ai_avoids_shenpan = pure_ok
+	_check(ai_avoids_shenpan, "四人AI:走子避开审判逆位禁止的技能增强吃子(不卡住)")
+
 	quit(0 if _fail_count == 0 else 1)
 
 
