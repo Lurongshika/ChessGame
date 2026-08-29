@@ -41,7 +41,7 @@ func _ready() -> void:
 	menu_btns.append(btn5)
 
 	_build_user_button()
-	_animate_menu_in()
+	Global.animate_ui_in(self)
 
 	# 自动化测试入口:--auto 时按命令行 net_role 直接进入联机对局(正常游玩不受影响)
 	if _has_user_arg("--auto") and Global.net_role != "local":
@@ -63,19 +63,6 @@ func _has_user_arg(prefix: String) -> bool:
 
 
 var menu_btns: Array = []
-
-
-# 主菜单按钮入场动画:依次淡入 + 上浮
-func _animate_menu_in() -> void:
-	for i in menu_btns.size():
-		var b: Button = menu_btns[i]
-		b.modulate.a = 0.0
-		var orig_pos: Vector2 = b.position
-		b.position = orig_pos + Vector2(0, 20)
-		var tw := create_tween()
-		tw.tween_interval(i * 0.08)
-		tw.tween_property(b, "modulate:a", 1.0, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		tw.parallel().tween_property(b, "position", orig_pos, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 var opt_root: Control
 
 

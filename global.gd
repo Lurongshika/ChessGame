@@ -52,6 +52,34 @@ static func flat_button(text: String, pos: Vector2, size: Vector2) -> Button:
 	return b
 
 
+# --- UI 出场动画(所有界面:主菜单/大厅/图鉴/设置等,含返回上一级) ---
+# 遍历场景内所有 Button,按纵向位置排序,依次淡入 + 上浮
+static func animate_ui_in(root: Node) -> void:
+	var buttons: Array = []
+	_collect_buttons(root, buttons)
+	# 按 y 位置排序(从上到下依次出现)
+	buttons.sort_custom(func(a, b): return a.global_position.y < b.global_position.y)
+	for i in buttons.size():
+		var b: Button = buttons[i]
+		# 已透明(如菜单动画已处理)则跳过
+		if b.modulate.a <= 0.01:
+			continue
+		b.modulate.a = 0.0
+		var orig_pos: Vector2 = b.position
+		b.position = orig_pos + Vector2(0, 16)
+		var tw := root.create_tween()
+		tw.tween_interval(i * 0.06)
+		tw.tween_property(b, "modulate:a", 1.0, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(b, "position", orig_pos, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+static func _collect_buttons(node: Node, out: Array) -> void:
+	if node is Button:
+		out.append(node)
+	for child in node.get_children():
+		_collect_buttons(child, out)
+
+
 # --- CRT 后处理(全局,参考 CrtTypewriter) ---
 var _crt_layer: CanvasLayer
 var _crt_rect: ColorRect

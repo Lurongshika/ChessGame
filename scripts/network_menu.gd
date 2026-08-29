@@ -55,6 +55,7 @@ func _ready() -> void:
 	var btn_back := _button("返回", Vector2(540, 500))
 	btn_back.pressed.connect(func(): Global.change_scene_with_fade("res://scenes/main.tscn"))
 	add_child(btn_back)
+	Global.animate_ui_in(self)
 
 
 func _port_edit(pos: Vector2) -> LineEdit:

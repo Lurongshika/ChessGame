@@ -131,6 +131,7 @@ func _ready() -> void:
 	)
 	add_child(opts_btn)
 	_net_init()
+	Global.animate_ui_in(self)
 
 
 func _build_color_palette() -> void:

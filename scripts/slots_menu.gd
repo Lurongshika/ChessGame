@@ -37,6 +37,7 @@ func _build_slots() -> void:
 			var del := _button("✕", Vector2(840, 180 + (i - 1) * 90), Vector2(50, 60))
 			del.pressed.connect(func(): _delete_slot(slot))
 			add_child(del)
+	Global.animate_ui_in(self)
 
 
 func _path(slot: int) -> String:

@@ -112,6 +112,7 @@ func _ready() -> void:
 	add_child(back_btn)
 
 	_load_profile()
+	Global.animate_ui_in(self)
 
 
 # 点击颜色:切换是否加入偏好(最多 4 个)

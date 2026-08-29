@@ -1600,6 +1600,7 @@ func _ready() -> void:
 	# 默认选中第一个技能(愚者)
 	if not Perks.PERKS_NORMAL.is_empty():
 		_select_skill(Perks.PERKS_NORMAL[0]["id"])
+	Global.animate_ui_in(self)
 
 
 func _build_list() -> void:
