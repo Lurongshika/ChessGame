@@ -388,7 +388,7 @@ func _run() -> void:
 		"moshushi": true, "moshushi2": true,
 		"huangdi": true, "huangdi2": true,
 		"siwang": true,
-		"zhanche": true, "zhanche2": true,
+		"zhanche": false, "zhanche2": false,  # 战车已改为被动(整局走法强化)
 		"diaodiao": true,
 		# 非目标型(直接发请求,host 端执行):隐者/倒吊人逆位/女祭司/愚者等
 		"yinzhe": false, "yinzhe2": false,
@@ -401,6 +401,69 @@ func _run() -> void:
 			targeting_ok = false
 			printerr("FAIL - 目标型列表 %s 期望 %s 实际 %s" % [pid, targeting_expected[pid], scene._is_targeting_skill(pid)])
 	_check(targeting_ok, "目标型技能列表完整(正逆位都本地选目标,非目标型直接请求)")
+
+	# --- 战车(被动·整局):与车相邻的棋子可落至车的可落位;选中车时可落至相邻子可落位 ---
+	scene.net_role = "local"
+	scene.phase = scene.Phase.PLAY
+	scene.turn = R.Side.RED
+	scene.actions_left = 1
+	scene.perks_red = {"zhanche": true}
+	scene.perks_black = {}
+	scene.board = []
+	for rr in R.ROWS:
+		var row := []
+		for cc in R.COLS:
+			row.append(null)
+		scene.board.append(row)
+	# 红车 (4,7),红兵 (5,7) 横向相邻:兵的可落位应包含车的可落位(车正上方无阻挡 → (4,0))
+	scene.board[7][4] = R.make_piece(R.Side.RED, R.Type.ROOK)
+	scene.board[7][5] = R.make_piece(R.Side.RED, R.Type.PAWN)
+	scene.board[0][4] = R.make_piece(R.Side.BLACK, R.Type.KING)
+	scene.selected4 = Vector2i(-1, -1)
+	scene.moves_cache.clear()
+	scene._select(Vector2i(5, 7))
+	var pawn_has_rook_landing := false
+	for m in scene.moves_cache:
+		if m.x == 4 and m.y == 0:  # 车的可落位:吃黑将 (4,0)
+			pawn_has_rook_landing = true
+	_check(pawn_has_rook_landing, "战车正位:与车相邻的兵可落至车的可落位(远距离)")
+	# host 校验放行:兵 (5,7) → (4,0) 车落位
+	scene.net_role = "host"
+	scene.turn = R.Side.RED
+	_check(scene._validate_move(Vector2i(5, 7), Vector2i(4, 0), "move", R.Side.RED) == true, "战车正位:host 校验放行战车落位移动")
+	# 战车逆位:选中车时,相邻子可落位并入车的落位
+	scene.perks_red = {"zhanche2": true}
+	scene.net_role = "local"
+	scene.moves_cache.clear()
+	scene._select(Vector2i(4, 7))  # 选中车
+	# 兵的合法落位:前进一格 (5,6) = 车的强化落位之一
+	var rook_has_any_boost := false
+	for m in scene.moves_cache:
+		if m == Vector2i(5, 6):  # 相邻兵前进一格 = 车的强化落位
+			rook_has_any_boost = true
+	_check(rook_has_any_boost, "战车逆位:选中车时,相邻子可落位并入车的落位")
+	# 四人:战车正位强化落位
+	scene.four_mode = true
+	scene.net_role = "local"
+	scene.board = []
+	for rr in 17:
+		var row4 := []
+		for cc in 17:
+			row4.append(null)
+		scene.board.append(row4)
+	scene.board[14][8] = R.make_piece(R.Side.RED, R.Type.ROOK)  # 红车 (8,14)
+	scene.board[14][9] = R.make_piece(R.Side.RED, R.Type.PAWN)  # 红兵 (9,14) 与车横向相邻
+	scene.board[0][8] = R.make_piece(R.Side.BLACK, R.Type.KING)  # 黑将 (8,0) 车正上方无阻挡
+	scene.perks4 = {0: {"zhanche": true}, 1: {}, 2: {}, 3: {}}
+	scene.turn4 = 2  # 红方回合
+	scene.moves4.clear()
+	scene._select4(Vector2i(9, 14))
+	var four_has_boost := false
+	for m in scene.moves4:
+		if m == Vector2i(8, 0):  # 车的可落位(吃到黑将)
+			four_has_boost = true
+	_check(four_has_boost, "四人战车正位:相邻兵可落至车的可落位")
+	scene.four_mode = false
 
 	if _failures == 0:
 		print("== NET SYNC OK ==")

@@ -688,7 +688,7 @@ func _activate_skill4(perk_id: String, side: int) -> void:
 			_skill_justice2_4(side)
 		"siwang2":
 			_skill_death2_4(side)
-		"moshushi", "moshushi2", "huangdi", "huangdi2", "zhanche", "zhanche2", "siwang", "diaodiao":
+		"moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "diaodiao":
 			_start_targeting4(perk_id, side)
 		"diaodiao2":
 			# 逆位:跳过本回合,下回合起获得其他所有方棋子控制权三回合
@@ -2256,7 +2256,11 @@ func _validate_move(from: Vector2i, to: Vector2i, kind: String, side: int) -> bo
 	if all_control and p["side"] != side and from in _controlled_moved:
 		return false
 	if kind == "move":
-		if not to in R.legal_moves(board, from, perks_red, perks_black):
+		var in_legal: bool = to in R.legal_moves(board, from, perks_red, perks_black)
+		# 战车(被动·整局):与车相邻的棋子可落至车的可落位;选中车时可落至相邻子(含敌方)的可落位
+		if not in_legal:
+			in_legal = to in _chariot_boost_moves(from, side)
+		if not in_legal:
 			return false
 		# 全控制/单子控制:被控子不能吃子
 		if is_controlled and board[to.y][to.x] != null:
@@ -3775,7 +3779,7 @@ func _on_perk_clicked(perk_id: String, side: int) -> void:
 
 
 func _is_targeting_skill(perk_id: String) -> bool:
-	return perk_id in ["moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "zhanche", "zhanche2", "diaodiao"]
+	return perk_id in ["moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "diaodiao"]
 
 
 func _is_active_skill(perk_id: String) -> bool:
@@ -3873,7 +3877,7 @@ func _activate_skill(perk_id: String, side: int) -> void:
 			_skill_justice2(side)
 		"siwang2":
 			_skill_death2(side)
-		"moshushi", "moshushi2", "huangdi", "huangdi2", "zhanche", "zhanche2", "siwang", "diaodiao":
+		"moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "diaodiao":
 			_start_targeting(perk_id, side)
 		"diaodiao2":
 			# 逆位:跳过本回合,下回合起获得所有对方棋子控制权三回合
@@ -4526,7 +4530,61 @@ func _select(pos: Vector2i) -> void:
 			var free_mv: Vector2i = pos + d
 			if R.in_board(free_mv) and board[free_mv.y][free_mv.x] == null:
 				free_retreat_targets.append(free_mv)
+	# 战车(被动·整局):与车相邻的棋子可落至车的可落位;选中车时可落至相邻子(含敌方)的可落位
+	var chariot_extra: Array[Vector2i] = _chariot_boost_moves(pos, turn)
+	for m in chariot_extra:
+		if m in moves_cache:
+			continue
+		# 与主循环一致的受保护目标过滤(无敌/教皇/恶魔禁吃/隐身不能吃)
+		if board[m.y][m.x] != null:
+			var ts3: int = board[m.y][m.x]["side"]
+			if invincible_side == ts3 or m == invincible_piece:
+				continue
+			if pope_guarded.has(m):
+				continue
+			if perks_of(ts3).has("emo") and last_eat["side"] == turn and last_eat["type"] == board[pos.y][pos.x]["type"]:
+				continue
+			if self_hidden:
+				continue
+			if controlled_move:
+				continue
+		moves_cache.append(m)
 	queue_redraw()
+
+
+# 战车(被动):返回选中 pos 的战车强化落位(整局生效,无次数限制)
+# 正位:选中的是己方棋子且与己方车相邻 → 车的可落位并入
+# 逆位:选中的是己方车 → 与其相邻子(含敌方)的可落位并入
+func _chariot_boost_moves(pos: Vector2i, side: int) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	var p = board[pos.y][pos.x]
+	if p == null or p["side"] != side:
+		return out
+	var perks := perks_of(side)
+	if p["type"] == R.Type.ROOK and perks.has("zhanche2"):
+		# 逆位:车的可落位 = 相邻子(含敌方)的可落位
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var np: Vector2i = pos + d
+			if not R.in_board(np):
+				continue
+			var q = board[np.y][np.x]
+			if q == null:
+				continue
+			for m in R.legal_moves(board, np, perks_red, perks_black):
+				if not m in out:
+					out.append(m)
+	elif perks.has("zhanche"):
+		# 正位:与己方车相邻 → 该车可落位并入
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var np: Vector2i = pos + d
+			if not R.in_board(np):
+				continue
+			var q = board[np.y][np.x]
+			if q != null and q["side"] == side and q["type"] == R.Type.ROOK:
+				for m in R.legal_moves(board, np, perks_red, perks_black):
+					if not m in out:
+						out.append(m)
+	return out
 
 
 # ==================== AI ====================
@@ -5015,7 +5073,58 @@ func _select4(pos: Vector2i) -> void:
 				continue
 		filtered.append(m)
 	moves4 = filtered
+	# 战车(被动·整局):与车相邻的棋子可落至车的可落位;选中车时可落至相邻子(含敌方)的可落位
+	var cur4 := current_side4()
+	var chariot_extra4: Array[Vector2i] = _chariot_boost_moves4(pos, cur4)
+	for m in chariot_extra4:
+		if m in moves4:
+			continue
+		# 与主循环一致的过滤:四角不可达/隐身子全控制不能吃/受保护目标
+		if _is_corner4(m):
+			continue
+		if board[m.y][m.x] != null and (self_hidden4 or controlled4):
+			continue
+		if board[m.y][m.x] != null:
+			var ts5: int = board[m.y][m.x]["side"]
+			if invincible_side4 == ts5 or m == invincible_piece4:
+				continue
+			if pope_guarded4.has(m):
+				continue
+		moves4.append(m)
 	queue_redraw()
+
+
+# 战车(被动,四人版):返回选中 pos 的战车强化落位
+func _chariot_boost_moves4(pos: Vector2i, side: int) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	var p = board[pos.y][pos.x]
+	if p == null or p["side"] != side:
+		return out
+	var perks_arr: Array = [perks4[0], perks4[1], perks4[2], perks4[3]]
+	if p["type"] == R.Type.ROOK and perks4[side].has("zhanche2"):
+		# 逆位:车的可落位 = 相邻子(含敌方)的可落位
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var np: Vector2i = pos + d
+			if not R.in_board(np, board):
+				continue
+			var q = board[np.y][np.x]
+			if q == null:
+				continue
+			for m in R.raw_moves4(board, np, perks_arr):
+				if not m in out:
+					out.append(m)
+	elif perks4[side].has("zhanche"):
+		# 正位:与己方车相邻 → 该车可落位并入
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var np: Vector2i = pos + d
+			if not R.in_board(np, board):
+				continue
+			var q = board[np.y][np.x]
+			if q != null and q["side"] == side and q["type"] == R.Type.ROOK:
+				for m in R.raw_moves4(board, np, perks_arr):
+					if not m in out:
+						out.append(m)
+	return out
 
 
 func _is_corner4(pos: Vector2i) -> bool:
@@ -5036,7 +5145,11 @@ func _try_move4(from: Vector2i, to: Vector2i) -> void:
 		var all_ctrl4: bool = controlled_all_turns4 > 0 and controlled_all_owner4 == side
 		if p == null or (p["side"] != side and not all_ctrl4):
 			return
-		if not to in R.raw_moves4(board, from, [perks4[0], perks4[1], perks4[2], perks4[3]]):
+		var in_legal4: bool = to in R.raw_moves4(board, from, [perks4[0], perks4[1], perks4[2], perks4[3]])
+		# 战车(被动·整局):与车相邻的棋子可落至车的可落位;选中车时可落至相邻子(含敌方)的可落位
+		if not in_legal4:
+			in_legal4 = to in _chariot_boost_moves4(from, side)
+		if not in_legal4:
 			return
 		# 全控制:每子每回合限移一次,不能吃子
 		if all_ctrl4 and p["side"] != side:
@@ -5816,7 +5929,11 @@ func request_move4(from: Vector2i, to: Vector2i) -> void:
 		return
 	# 走法校验
 	var perks_arr: Array = [perks4[0], perks4[1], perks4[2], perks4[3]]
-	if not to in R.raw_moves4(board, from, perks_arr):
+	var in_legal4b: bool = to in R.raw_moves4(board, from, perks_arr)
+	# 战车(被动·整局):与车相邻的棋子可落至车的可落位;选中车时可落至相邻子(含敌方)的可落位
+	if not in_legal4b:
+		in_legal4b = to in _chariot_boost_moves4(from, side)
+	if not in_legal4b:
 		return
 	if hidden_pieces4.has(from) and board[to.y][to.x] != null:
 		return
