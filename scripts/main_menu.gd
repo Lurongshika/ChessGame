@@ -269,6 +269,12 @@ func _close_options() -> void:
 		opt_root.queue_free()
 		opt_root = null
 	_set_menu_visible(true)
+	# 返回主界面:重新播放主菜单按钮入场动画(选项层已释放,避免连带动画)
+	call_deferred("_replay_menu_anim")
+
+
+func _replay_menu_anim() -> void:
+	Global.animate_ui_in(self)
 
 
 func _set_menu_visible(v: bool) -> void:
