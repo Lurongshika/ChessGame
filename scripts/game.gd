@@ -764,10 +764,13 @@ func _apply_skill_cd4(perk_id: String, side: int) -> void:
 	var cd := _skill_cd_value(perk_id)
 	if cd <= 0:
 		return
-	if perks4[side].has("liliang2"):
-		cd = maxi(cd - roundi(cd / 4.0), 0)  # 力量逆位:充能上限-1/4(四舍五入)
-	elif perks4[side].has("liliang"):
-		cd = maxi(cd - 1, 0)
+	if perks4[side].has("liliang"):
+		cd = maxi(cd - 2, 0)  # 力量:我方主动技能冷却-2
+	# 力量逆位:任意其他方有此技能时,该方技能冷却+2
+	for es in 4:
+		if es != side and perks4[es].has("liliang2"):
+			cd += 2
+			break
 	if cd > 0:
 		skill_cd4[side][perk_id] = cd
 
@@ -4207,10 +4210,11 @@ func _apply_skill_cd(perk_id: String, side: int) -> void:
 	var cd := _skill_cd_value(perk_id)
 	if cd <= 0:
 		return
-	if perks_of(side).has("liliang2"):
-		cd = maxi(cd - roundi(cd / 4.0), 0)  # 力量逆位:充能上限-1/4(四舍五入)
-	elif perks_of(side).has("liliang"):
-		cd = maxi(cd - 1, 0)  # 力量:主动技能充能上限-1
+	if perks_of(side).has("liliang"):
+		cd = maxi(cd - 2, 0)  # 力量:我方主动技能冷却-2
+	# 力量逆位:敌方技能冷却+2(敌方有力量逆位时)
+	if 1 - side >= 0 and perks_of(1 - side).has("liliang2"):
+		cd += 2
 	if cd > 0:
 		skill_cd[side][perk_id] = cd
 

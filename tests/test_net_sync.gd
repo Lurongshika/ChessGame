@@ -602,6 +602,42 @@ func _run() -> void:
 	_check(scene.board[5][5] != null and scene.board[5][5]["type"] == R.Type.CANNON, "指令(四人):place 放置炮")
 	scene.four_mode = false
 
+	# --- 力量:我方主动技能冷却-2;力量逆位:敌方技能冷却+2 ---
+	scene.net_role = "host"
+	scene.phase = scene.Phase.PLAY
+	scene.board = R.make_board()
+	scene.turn = R.Side.RED
+	scene.actions_left = 1
+	scene.skill_cd = {0: {}, 1: {}}
+	# 力量正位:红方有,女祭司冷却3-2=1
+	scene.perks_red = {"liliang": true}
+	scene.perks_black = {}
+	scene._apply_skill_cd("nvjisi", R.Side.RED)
+	_check(scene.skill_cd[R.Side.RED].get("nvjisi", -1) == 1, "力量:我方主动技能冷却-2(3→1)")
+	# 力量逆位:黑方有,红方释放女祭司冷却3+2=5
+	scene.skill_cd = {0: {}, 1: {}}
+	scene.perks_red = {}
+	scene.perks_black = {"liliang2": true}
+	scene._apply_skill_cd("nvjisi", R.Side.RED)
+	_check(scene.skill_cd[R.Side.RED].get("nvjisi", -1) == 5, "力量逆位:敌方技能冷却+2(3→5)")
+	# 四人:力量逆位任意其他方
+	scene.four_mode = true
+	scene.board = R.make_board4()
+	scene.perks4 = {0: {"liliang": true}, 1: {}, 2: {"liliang2": true}, 3: {}}
+	scene.skill_cd4 = {0: {}, 1: {}, 2: {}, 3: {}}
+	scene._apply_skill_cd4("nvjisi", 1)  # 蓝方(1)释放,绿方(2)有力量逆位 → cd +2
+	_check(scene.skill_cd4[1].get("nvjisi", -1) == 5, "四人:力量逆位使敌方冷却+2(3→5)")
+	# 单独验证红方力量正位(清掉其它影响):红方(0)有力量正位,-2
+	scene.skill_cd4 = {0: {}, 1: {}, 2: {}, 3: {}}
+	scene._apply_skill_cd4("nvjisi", 0)  # 红方(0)也有力量正位,但绿方(2)力量逆位仍 +2 → 3-2+2=3
+	_check(scene.skill_cd4[0].get("nvjisi", -1) == 3, "四人:力量正位-2与逆位+2叠加(3→3)")
+	# 无逆位干扰的力量正位
+	scene.perks4 = {0: {"liliang": true}, 1: {}, 2: {}, 3: {}}
+	scene.skill_cd4 = {0: {}, 1: {}, 2: {}, 3: {}}
+	scene._apply_skill_cd4("nvjisi", 0)
+	_check(scene.skill_cd4[0].get("nvjisi", -1) == 1, "四人:力量正位使己方冷却-2(3→1)")
+	scene.four_mode = false
+
 	await _test_tab_completion()
 
 	if _failures == 0:
