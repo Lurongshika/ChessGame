@@ -5566,6 +5566,9 @@ func _apply_state_data4(data: Dictionary) -> void:
 	_refresh_perk_panels4()
 	_update_status4()
 	queue_redraw()
+	# 四人:对局结束(有胜者)时显示结算,所有端一致(含客户端收到广播后)
+	if winner4 >= 0:
+		_show_four_result()
 
 
 # 主机把完整 4 方状态广播给所有客户端
