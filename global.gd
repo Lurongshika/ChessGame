@@ -14,6 +14,11 @@ var player_colors := {}     # 对局:side -> 棋子颜色索引(大厅分配)
 var lobby_players := {}     # 对局:side -> {name, avatar_data, color} 四方玩家信息(大厅传入)
 var game_rules := {}        # 自定义对局规则(大厅选项): win_mode/king_down/promotion/kill_count
 var from_lobby := false     # 是否从等候大厅进入对局(复用大厅连接)
+var reconnect_mode := false # 断线重连:客户端直接进 game 场景重连(跳过 Lobby,避免跨场景 RPC 路径错误)
+
+# 断线重连信息(user://reconnect.json):进程重启后主菜单检测,提供"重连对局"入口
+const RECONNECT_PATH := "user://reconnect.json"
+var reconnect_info := {}    # {ip, port, mode, standard}
 
 # 设置(用户可调,持久化到 user://settings.json)
 const SETTINGS_PATH := "user://settings.json"
@@ -335,6 +340,49 @@ func change_scene_with_fade(path: String) -> void:
 	_pending_scene = path
 	_switching = true
 	_fade_target = 1.0
+
+
+# 记录断线重连信息(客户端进入联机对局时写入;正常结束/返回菜单时清除)
+func save_reconnect_info() -> void:
+	var f := FileAccess.open(RECONNECT_PATH, FileAccess.WRITE)
+	if f == null:
+		return
+	f.store_string(JSON.stringify({
+		"ip": server_ip,
+		"port": port,
+		"mode": game_mode,
+		"standard": standard_mode,
+	}))
+	f.close()
+
+
+# 清除断线重连信息(对局正常结束/退出时)
+func clear_reconnect_info() -> void:
+	if FileAccess.file_exists(RECONNECT_PATH):
+		DirAccess.remove_absolute(RECONNECT_PATH)
+
+
+# 是否存在可重连的对局(主菜单显示"重连对局"按钮)
+func has_reconnect() -> bool:
+	return FileAccess.file_exists(RECONNECT_PATH)
+
+
+# 读取重连信息并设置到 Global(供 game 场景重连)
+func load_reconnect_info() -> bool:
+	if not FileAccess.file_exists(RECONNECT_PATH):
+		return false
+	var f := FileAccess.open(RECONNECT_PATH, FileAccess.READ)
+	if f == null:
+		return false
+	var data: Variant = JSON.parse_string(f.get_as_text())
+	if not (data is Dictionary):
+		return false
+	reconnect_info = data
+	server_ip = str(data.get("ip", ""))
+	port = int(data.get("port", 7777))
+	game_mode = str(data.get("mode", "four"))
+	standard_mode = bool(data.get("standard", false))
+	return true
 
 
 # 解析命令行参数(用于自动化测试):--net=host/client --ip=192.168.x.x --port=7777 --mode=pvp/ai --slot=1 --pool=normal/advanced

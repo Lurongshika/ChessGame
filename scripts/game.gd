@@ -199,13 +199,20 @@ func _ready() -> void:
 	if four_mode:
 		# 联机四人:每个进程各控一方(不强制 local),side 由大厅分配
 		if Global.from_lobby:
-			my_side4 = _find_my_side4()
-			if my_side4 >= 0:
-				own_side = my_side4
-			if net_role == "host":
-				_build_four_side_map()
-			# 本机视角旋转:自己的半场朝下(红不转/黑180°/绿90°CW/蓝270°CW)
-			_view_rot4 = {0: 0, 1: 1, 2: 2, 3: 3}.get(my_side4, 0)
+			if Global.reconnect_mode:
+				# 断线重连:跳过席位自查(进程重启无 lobby_players),等主机 sync_state4 告知 side
+				net_role = "client"
+			else:
+				my_side4 = _find_my_side4()
+				if my_side4 >= 0:
+					own_side = my_side4
+				if net_role == "host":
+					_build_four_side_map()
+				# 本机视角旋转:自己的半场朝下(红不转/黑180°/绿90°CW/蓝270°CW)
+				_view_rot4 = {0: 0, 1: 1, 2: 2, 3: 3}.get(my_side4, 0)
+				# 客户端:持久化重连信息(进程崩溃重启后可一键重连)
+				if net_role == "client":
+					Global.save_reconnect_info()
 		else:
 			net_role = "local"
 	if four_mode:
@@ -226,6 +233,17 @@ func _ready() -> void:
 		winner4 = -1
 		selected4 = Vector2i(-1, -1)
 		moves4 = []
+		if Global.reconnect_mode:
+			# 断线重连:进程重启后直接重连主机,等待分配席位并回传状态(跳过 Lobby 避免跨场景 RPC 路径错误)
+			net_role = "client"
+			_reconnecting = true
+			net_wait_label = _make_label("正在重连对局...", 26, Color(0.95, 0.85, 0.6))
+			net_wait_label.position = Vector2(0, 200)
+			net_wait_label.size = Vector2(1280, 120)
+			net_wait_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			ui.add_child(net_wait_label)
+			_setup_client()
+			return
 		if Global.from_lobby and net_role != "local":
 			_from_lobby_start4()
 		elif Global.standard_mode:
@@ -543,7 +561,10 @@ func _build_ui4() -> void:
 	_build_record_panel()
 	# 返回菜单按钮
 	var quit_btn := _make_button("返回菜单", Vector2(1280 - 224 - 12, 720 - 44 - 12), Vector2(224, 44))
-	quit_btn.pressed.connect(func(): Global.change_scene_with_fade("res://scenes/main.tscn"))
+	quit_btn.pressed.connect(func():
+		Global.clear_reconnect_info()
+		Global.change_scene_with_fade("res://scenes/main.tscn")
+	)
 	ui.add_child(quit_btn)
 
 
@@ -1179,19 +1200,25 @@ func client_ready4() -> void:
 		_four_ready_done[pid] = true
 		# 把重连 pid 关联到空缺席位(若无空缺则匹配原 pid)
 		var assigned := false
+		var assign_side := -1
 		for side in _four_side_absent:
 			if _four_side_absent[side]:
 				four_side_to_peer[side] = pid
 				_four_side_absent[side] = false
 				assigned = true
+				assign_side = side
 				print("NET4: client RECONNECT pid=", pid, " -> side ", side)
 				break
 		if not assigned:
 			for side in four_side_to_peer:
 				if int(Global.lobby_players.get(side, {}).get("pid", -1)) == pid:
+					assign_side = side
 					print("NET4: client RECONNECT same pid=", pid, " side=", side)
 					break
-		sync_state4.rpc_id(pid, _state_to_data4())
+		# 重连客户端进程重启后没有 lobby_players,必须告知其 side
+		var data := _state_to_data4()
+		data["my_side4"] = assign_side
+		sync_state4.rpc_id(pid, data)
 		return
 	if _four_ready_done.has(pid):
 		return
@@ -3393,6 +3420,7 @@ func _show_result() -> void:
 	result_root.add_child(title)
 	var again := _make_button("再来一局(重新抽卡)", Vector2(540, 240), Vector2(200, 52))
 	again.pressed.connect(func():
+		Global.clear_reconnect_info()
 		if net_role == "local":
 			get_tree().reload_current_scene()
 		else:
@@ -3407,6 +3435,7 @@ func _show_result() -> void:
 		result_root.add_child(replay_btn)
 	var menu := _make_button("返回菜单", Vector2(540, 380), Vector2(200, 52))
 	menu.pressed.connect(func():
+		Global.clear_reconnect_info()
 		if Global.demo_perk != "":
 			Global.demo_perk = ""
 			Global.change_scene_with_fade("res://scenes/manual.tscn")
@@ -5266,6 +5295,18 @@ func _broadcast_state4() -> void:
 @rpc("authority", "reliable")
 func sync_state4(data: Dictionary) -> void:
 	_apply_state_data4(data)
+	# 重连:主机告知本进程的 side(进程重启后 lobby_players 为空,无法自查)
+	if Global.reconnect_mode and data.has("my_side4"):
+		var side := int(data["my_side4"])
+		if side >= 0:
+			my_side4 = side
+			own_side = side
+			_view_rot4 = {0: 0, 1: 1, 2: 2, 3: 3}.get(side, 0)
+			Global.reconnect_mode = false
+			if net_wait_label != null:
+				net_wait_label.queue_free()
+				net_wait_label = null
+			queue_redraw()
 
 
 # 客户端 → 主机:请求走子(四人)

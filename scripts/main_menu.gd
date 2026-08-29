@@ -13,34 +13,41 @@ func _ready() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(title)
 
+	# 重连对局(断线后进程重启:直接进 game 场景重连,跳过 Lobby 避免跨场景 RPC 路径错误)
+	if Global.has_reconnect():
+		var btn1 := _button("重连对局", Vector2(540, 240))
+		btn1.pressed.connect(_do_reconnect)
+		add_child(btn1)
+		menu_btns.append(btn1)
+
 	# 继续对局(有存档时显示)
 	if _has_any_save():
-		var btn0 := _button("继续对局", Vector2(540, 240))
+		var btn0 := _button("继续对局", Vector2(540, 310))
 		btn0.pressed.connect(func(): Global.change_scene_with_fade("res://scenes/slots.tscn"))
 		add_child(btn0)
 		menu_btns.append(btn0)
 
-	var btn2 := _button("人机对战", Vector2(540, 310))
+	var btn2 := _button("人机对战", Vector2(540, 380))
 	btn2.pressed.connect(_show_ai_options)
 	add_child(btn2)
 	menu_btns.append(btn2)
 
-	var btn3 := _button("局域网联机", Vector2(540, 380))
+	var btn3 := _button("局域网联机", Vector2(540, 450))
 	btn3.pressed.connect(_show_net_options)
 	add_child(btn3)
 	menu_btns.append(btn3)
 
-	var btn4 := _button("技能图鉴", Vector2(540, 450))
+	var btn4 := _button("技能图鉴", Vector2(540, 520))
 	btn4.pressed.connect(func(): Global.change_scene_with_fade("res://scenes/manual.tscn"))
 	add_child(btn4)
 	menu_btns.append(btn4)
 
-	var btn5 := _button("设置", Vector2(540, 520))
+	var btn5 := _button("设置", Vector2(540, 590))
 	btn5.pressed.connect(_show_settings)
 	add_child(btn5)
 	menu_btns.append(btn5)
 
-	var btn6 := _button("退出游戏", Vector2(540, 590))
+	var btn6 := _button("退出游戏", Vector2(540, 660))
 	btn6.pressed.connect(func(): get_tree().quit())
 	add_child(btn6)
 	menu_btns.append(btn6)
@@ -457,6 +464,17 @@ func _start_local_pool(mode: String, standard: bool, pool: String) -> void:
 	Global.load_slot = 0
 	Global.standard_mode = standard
 	Global.perk_pool = pool
+	Global.change_scene_with_fade("res://scenes/game.tscn")
+
+
+# 断线重连:读取持久化连接信息,直接进 game 场景(客户端),跳过 Lobby
+func _do_reconnect() -> void:
+	if not Global.load_reconnect_info():
+		Global.clear_reconnect_info()
+		return
+	Global.net_role = "client"
+	Global.reconnect_mode = true
+	Global.from_lobby = true
 	Global.change_scene_with_fade("res://scenes/game.tscn")
 
 
