@@ -4941,6 +4941,10 @@ func _draw_board4() -> void:
 	_draw_arm4(Rect2(ORIGIN4 + Vector2(CENTER4, 13) * CELL4, Vector2(armW, armH)), line)
 	_draw_arm4(Rect2(ORIGIN4 + Vector2(0, CENTER4) * CELL4, Vector2(armH, armW)), line)
 	_draw_arm4(Rect2(ORIGIN4 + Vector2(13, CENTER4) * CELL4, Vector2(armH, armW)), line)
+	# 占领模式:中心 5 点用黑点标记(画在棋盘上、棋子下方)
+	if Global.game_rules.get("win_mode", "classic") == "occupy":
+		for spot in _occupy_spots4():
+			draw_circle(_pos_px4(spot), 5.0, Color(0, 0, 0, 0.85))
 
 
 func _draw_arm4(rect: Rect2, line: Color) -> void:
@@ -5038,10 +5042,6 @@ func _draw_particles4() -> void:
 
 
 func _draw_overlay4() -> void:
-	# 占领模式:中心 5 点用黑点标记
-	if Global.game_rules.get("win_mode", "classic") == "occupy":
-		for spot in _occupy_spots4():
-			draw_circle(_pos_px4(spot), 5.0, Color(0, 0, 0, 0.85))
 	# 复制双人落位显示:选中黄圈 / 落位绿点(空位)红圈(吃子);协同棋子免费移动落点用蓝色
 	var is_sync_sel4: bool = selected4.x >= 0 and selected4 in sync_pieces4
 	if selected4.x >= 0:
