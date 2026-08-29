@@ -121,6 +121,8 @@ var free_retreat4_used := false                   # 四人:星星正位每回合
 var draft4_side := 0        # 四人 DRAFT:当前选技能方
 var kill_count4 := {0: 0, 1: 0, 2: 0, 3: 0}  # 四人杀棋计数
 var grey_side4 := -1           # 将帅被杀后变灰保留的方(-1=无)
+var in_check4 := {0: false, 1: false, 2: false, 3: false}  # 四人:各方王是否被将
+var _prev_check4 := {0: false, 1: false, 2: false, 3: false}  # 四人:上一次被将(用于上升沿警报)
 var draft4_round := 0
 var draft4_options: Array = []
 var _draft_selected4: Array = []  # 四人 DRAFT:当前方已点选的技能(最多 3 个)
@@ -2908,6 +2910,8 @@ func _start_four_game() -> void:
 	board = R.make_board4()
 	_apply_four_skills_setup()
 	_refresh_perk_panels4()
+	in_check4 = {0: false, 1: false, 2: false, 3: false}
+	_prev_check4 = {0: false, 1: false, 2: false, 3: false}
 	# 愚者·逆位:开局无充能(满 CD,需 16 回合充能)
 	for s in 4:
 		if perks4[s].has("yuzhe2"):
@@ -3170,6 +3174,41 @@ func _is_in_check_board(b: Array, side: int) -> bool:
 			if king in R.raw_moves(b, pos, perks_red, perks_black):
 				return true
 	return false
+
+
+# 四人:游戏感知的被将判定(自由混战,任意其它方威胁王即算;其它方全体为敌)
+# 考虑恶魔(禁同类型连续吃)/隐身(隐身子不能吃)/无敌(王不可被吃)
+func _is_in_check4(board: Array, side: int) -> bool:
+	var king := R.find_king(board, side)
+	if king.x < 0:
+		return false
+	if invincible_side4 == side or invincible_piece4 == king or pope_guarded4.has(king):
+		return false  # 王无敌(含教皇保护):不可被吃,不算被将
+	var perks_arr: Array = [perks4[0], perks4[1], perks4[2], perks4[3]]
+	for r in board.size():
+		for c in board[r].size():
+			var pos := Vector2i(c, r)
+			var p = board[r][c]
+			if p == null or p["side"] == side:
+				continue
+			if hidden_pieces4.has(pos):
+				continue  # 隐身的子不能吃子,不构成被将
+			if perks4[side].has("emo") and last_eat4["side"] == p["side"] and last_eat4["type"] == p["type"]:
+				continue  # 恶魔:敌方同类型子被禁吃,不构成被将
+			if king in R.raw_moves4(board, pos, perks_arr):
+				return true
+	return false
+
+
+# 四人:刷新各方被将状态,并对"刚被将"的一方发出警报(上升沿)
+func _refresh_check4() -> void:
+	for s in 4:
+		var now: bool = _is_in_check4(board, s)
+		in_check4[s] = now
+		if now and not _prev_check4[s]:
+			_show_status4("⚠ %s 被将!" % SIDE_NAMES4[s])
+			Global.play_sfx("kill", -4.0)
+		_prev_check4[s] = now
 
 
 # 游戏感知的"是否有合法走法":考虑无敌/象无敌/恶魔/隐身/走后将军
@@ -5515,6 +5554,13 @@ func _draw_overlay4() -> void:
 	# 星星:兵免费移兵落位(蓝色)
 	for t4 in free_retreat4_targets:
 		draw_circle(_pos_px4(t4), 4.0, Color(0.3, 0.55, 0.95, 0.95))
+	# 被将警报:各方王被将 → 红色脉冲描边(呼吸)
+	for s7 in 4:
+		if not in_check4.get(s7, false):
+			continue
+		var king7 := R.find_king(board, s7)
+		if king7.x >= 0:
+			draw_arc(_pos_px4(king7), 20.0 + br4 * 2.0, 0, TAU, 32, Color(1.0, 0.32, 0.25, br4_alpha), 3.0)
 	# 隐者:隐身棋子只保留半透明(棋子本体绘制),不画"隐"字与描边,避免暴露隐身位置
 
 
@@ -5863,6 +5909,7 @@ func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 		_update_status4()
 	_refresh_pope_guard4(side)
 	_refresh_pope_guard4(_next_alive4(side))
+	_refresh_check4()
 	_update_progress4()
 	# 占领模式:走子后检查中心占领
 	if Global.game_rules.get("win_mode", "classic") == "occupy":
@@ -6116,16 +6163,17 @@ func _remove_pieces4(dead: int) -> void:
 func _update_status4() -> void:
 	if status_label != null:
 		var side := current_side4()
+		var check_txt := "  ⚠ 被将!" if in_check4.get(side, false) else ""
 		if my_side4 >= 0:
 			# 联机:轮到自己的方显示"你的回合"(呼吸),否则等待对方
 			if side == my_side4:
-				status_label.text = "你的回合"
+				status_label.text = "你的回合" + check_txt
 				_my_turn_breath4 = true
 			else:
 				var nm2: String = ""
 				if Global.lobby_players.has(side):
 					nm2 = Global.lobby_players[side].get("name", SIDE_NAMES4[side])
-				status_label.text = "等待 %s..." % nm2
+				status_label.text = "等待 %s..." % nm2 + check_txt
 				_my_turn_breath4 = false
 		else:
 			# 本地四人:显示当前方回合名
@@ -6134,7 +6182,7 @@ func _update_status4() -> void:
 				nm = Global.lobby_players[side].get("name", "")
 			if nm.is_empty():
 				nm = SIDE_NAMES4[side]
-			status_label.text = "回合：" + nm
+			status_label.text = "回合：" + nm + check_txt
 			_my_turn_breath4 = false
 		status_label.modulate = _side_color(side)
 	_refresh_perk_panels4()
@@ -6241,6 +6289,7 @@ func _begin_turn4() -> void:
 	free_retreat4_targets = []
 	_refresh_perk_panels4()
 	_update_status4()
+	_refresh_check4()
 	queue_redraw()
 	# 机器人补位:轮到 AI 方自动走子(主机权威执行并广播)
 	_maybe_ai4()
@@ -6548,6 +6597,7 @@ func _apply_state_data4(data: Dictionary) -> void:
 		_refresh_record4()
 	_refresh_perk_panels4()
 	_update_status4()
+	_refresh_check4()
 	queue_redraw()
 	# 四人:对局结束(有胜者)时显示结算,所有端一致(含客户端收到广播后)
 	if winner4 >= 0:

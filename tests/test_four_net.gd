@@ -107,6 +107,43 @@ func _run() -> void:
 	game._apply_state_data4(pd)
 	_check(game.pope_countered4.size() > 0, "四人:客户端收到反制标记")
 
+	# --- 四人被将警报:王被威胁 → 判定/警报/王被将红圈 ---
+	game.four_mode = true
+	game.net_role = "local"
+	game.my_side4 = -1
+	game.board = R.make_board4()
+	for rr in 17:
+		for cc in 17:
+			game.board[rr][cc] = null
+	# 红方王在 (8,8),黑方車放同列 (8,4) 直接威胁王
+	game.board[8][8] = R.make_piece(R.Side.RED, R.Type.KING)
+	game.board[4][8] = R.make_piece(R.Side.BLACK, R.Type.ROOK)
+	game.perks4 = {0: {}, 1: {}, 2: {}, 3: {}}
+	game.invincible_side4 = -1
+	game.invincible_piece4 = Vector2i(-1, -1)
+	game.pope_guarded4 = {}
+	game.hidden_pieces4 = {}
+	game.last_eat4 = {"side": -1, "type": -1}
+	_check(game._is_in_check4(game.board, R.Side.RED), "四人被将:红方王被威胁判定为被将")
+	_check(not game._is_in_check4(game.board, R.Side.BLACK), "四人被将:黑方王不受威胁")
+	# 隔开車与王(挡子)则不被将
+	game.board[6][8] = R.make_piece(R.Side.BLACK, R.Type.PAWN)
+	_check(not game._is_in_check4(game.board, R.Side.RED), "四人被将:中间有子阻挡不算被将")
+	# 王被将时刷新警报:in_check4 记录 + 上升沿触发一次
+	game.board[6][8] = null
+	game._prev_check4 = {0: false, 1: false, 2: false, 3: false}
+	game._refresh_check4()
+	_check(game.in_check4[R.Side.RED], "四人被将:刷新后红方标记被将")
+	# 状态广播往返:in_check4 随状态保留(警报在客户端一致)
+	game._prev_check4 = {0: false, 1: false, 2: false, 3: false}
+	game._refresh_check4()
+	var bd = game._state_to_data4()
+	game.in_check4 = {0: false, 1: false, 2: false, 3: false}
+	game.board[8][8] = null
+	game._apply_state_data4(bd)
+	_check(game.in_check4[R.Side.RED], "四人被将:客户端收到广播后被将状态保留")
+	_check(game.board[8][8] != null and game.board[8][8]["side"] == R.Side.RED, "四人被将:广播后棋盘恢复(含王)")
+
 	# --- 四人隐者逆位:隐身标记生效 + 联机视角可见性 ---
 	game.four_mode = true
 	game.net_role = "host"
