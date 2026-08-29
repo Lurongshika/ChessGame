@@ -603,10 +603,18 @@ func _refresh_perk_panels4() -> void:
 				continue
 			var info: Dictionary = perks_data[id]
 			var tip: String = info.get("tip", "")
+			# 充能进度:皇后/死亡用充能值,主动技能显示剩余冷却
+			var prog := ""
 			if id == "huanghou":
-				tip += " (充能 %d/3)" % queen_charge4[side]
-			if id == "siwang":
-				tip += " (充能 %d/3)" % siwang_charge4[side]
+				prog = "充能 %d/3" % queen_charge4[side]
+			elif id == "siwang":
+				prog = "充能 %d/3" % siwang_charge4[side]
+			if _is_active_skill(id) and prog.is_empty():
+				var cd_left4: int = int(skill_cd4.get(side, {}).get(id, 0))
+				if cd_left4 > 0:
+					prog = "冷却 %d" % cd_left4
+			if not prog.is_empty():
+				tip += "  [%s]" % prog
 			var card := PerkCard.new()
 			card.setup(id, side, info["name"], tip, info["desc"], _font(), true, 200.0)
 			# 四人:技能卡背景用该方玩家颜色
@@ -661,6 +669,8 @@ func _on_perk_clicked4(perk_id: String, side: int) -> void:
 # 四人主动技能执行:复制双人 _activate_skill 的分支
 func _activate_skill4(perk_id: String, side: int) -> void:
 	_record_skill4(side, perk_id)
+	# 全局释放提醒(屏幕中央)
+	_show_skill_announce(perk_id, side)
 	match perk_id:
 		"nvjisi", "nvjisi2":
 			_skill_priestess4(perk_id, side)
@@ -3644,9 +3654,18 @@ func _add_perk_cards(box: VBoxContainer, side_id: int, is_self: bool) -> void:
 			continue
 		var info: Dictionary = perks_data[id]
 		var tip: String = info.get("tip", "")
-		# 皇后:tip 上显示当前充能(被吃 1 子 +1,上限 3)
+		# 充能进度:皇后/死亡用充能值,主动技能显示剩余冷却
+		var prog := ""
 		if id == "huanghou":
-			tip += " (充能 %d/3)" % queen_charge[side_id]
+			prog = "充能 %d/3" % queen_charge[side_id]
+		elif id == "siwang":
+			prog = "充能 %d/3" % siwang_charge[side_id]
+		if _is_active_skill(id) and prog.is_empty():
+			var cd_left: int = int(skill_cd.get(side_id, {}).get(id, 0))
+			if cd_left > 0:
+				prog = "冷却 %d" % cd_left
+		if not prog.is_empty():
+			tip += "  [%s]" % prog
 		var card := PerkCard.new()
 		card.setup(id, side_id, info["name"], tip, info["desc"], _font(), is_self, 210.0)
 		card.clicked.connect(_on_perk_clicked)
@@ -3725,8 +3744,58 @@ func _apply_skill_cd(perk_id: String, side: int) -> void:
 		skill_cd[side][perk_id] = cd
 
 
+# 全局技能释放提醒:屏幕中央大字提示(双人/四人通用)
+var _announce_root: Control
+var _announce_tween: Tween
+
+
+func _show_skill_announce(perk_id: String, side: int) -> void:
+	if ui == null or _announce_root != null:
+		return
+	var nm: String = perks_data[perk_id]["name"] if perks_data.has(perk_id) else perk_id
+	var who: String
+	if four_mode:
+		who = SIDE_NAMES4[side]
+	else:
+		who = "红方" if side == R.Side.RED else "黑方"
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui.add_child(root)
+	_announce_root = root
+	var bg := ColorRect.new()
+	bg.color = Color(0.05, 0.05, 0.1, 0.35)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(bg)
+	var label := _make_label("", 40, Color(1.0, 0.9, 0.35))
+	label.text = "%s 使用技能\n%s" % [who, nm]
+	label.position = Vector2(0, 260)
+	label.size = Vector2(1280, 140)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	root.add_child(label)
+	label.modulate.a = 0.0
+	label.scale = Vector2(0.8, 0.8)
+	label.pivot_offset = Vector2(640, 70)
+	var tw := create_tween()
+	tw.tween_property(label, "modulate:a", 1.0, 0.25)
+	tw.parallel().tween_property(label, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(1.1)
+	tw.tween_property(label, "modulate:a", 0.0, 0.4)
+	tw.tween_callback(func():
+		if root != null and is_instance_valid(root):
+			root.queue_free()
+		if _announce_root == root:
+			_announce_root = null
+	)
+	_announce_tween = tw
+
+
 func _activate_skill(perk_id: String, side: int) -> void:
 	_record_skill(side, perk_id)
+	# 全局释放提醒(屏幕中央)
+	_show_skill_announce(perk_id, side)
 	match perk_id:
 		"nvjisi", "nvjisi2":
 			_skill_priestess(perk_id, side)
@@ -5239,6 +5308,7 @@ func _update_status4() -> void:
 			status_label.text = "回合：" + nm
 			_my_turn_breath4 = false
 		status_label.modulate = _side_color(side)
+	_refresh_perk_panels4()
 
 # 四人:状态提示(技能反馈等),1 秒后恢复回合显示
 func _show_status4(msg: String) -> void:
