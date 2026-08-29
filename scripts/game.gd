@@ -172,6 +172,7 @@ var _four_perk_boxes: Array = []  # 四人模式:四方技能悬浮窗内容框
 var draft_root: Control
 var _draft_ui_shown := false  # 三选一界面是否已首次显示(首次弹入,刷新重建不重复)
 var result_root: Control
+var four_result_root: Control  # 四人:结算遮罩(返回大厅)
 var net_wait_label: Label
 var chat: Panel  # 对局聊天栏
 var record_panel: Panel  # 对局记录中心悬浮窗
@@ -2217,9 +2218,15 @@ func _validate_move(from: Vector2i, to: Vector2i, kind: String, side: int) -> bo
 		# 全控制/单子控制:被控子不能吃子
 		if is_controlled and board[to.y][to.x] != null:
 			return false
-		# 审判逆位:敌方不能以技能/受控棋子吃我方棋子(只能原版移动吃)
-		if board[to.y][to.x] != null and is_controlled and perks_of(board[to.y][to.x]["side"]).has("shenpan2"):
-			return false
+		# 审判逆位:敌方吃我方棋子时,判断"去掉技能后能否吃到";纯规则吃不到(靠技能增强)则禁吃
+		if board[to.y][to.x] != null and perks_of(board[to.y][to.x]["side"]).has("shenpan2"):
+			var pure_ok := false
+			for pure_m in R.legal_moves(board, from, {}, {}):
+				if pure_m == to:
+					pure_ok = true
+					break
+			if not pure_ok:
+				return false
 		# 隐者:隐身的子不能吃子(可移动到空格)
 		if hidden_pieces.has(from) and board[to.y][to.x] != null:
 			return false
@@ -2446,7 +2453,6 @@ func _auto_pick_four() -> void:
 func _start_four_game() -> void:
 	phase = Phase.PLAY
 	board = R.make_board4()
-	Global.play_bgm()
 	_apply_four_skills_setup()
 	_refresh_perk_panels4()
 	# 愚者·逆位:开局无充能(满 CD,需 16 回合充能)
@@ -4848,6 +4854,17 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 		_show_status4("隐身的棋子不能吃子")
 		return
 	var captured = board[to.y][to.x]
+	# 审判逆位:敌方吃我方棋子时,判断"去掉技能后能否吃到";纯规则吃不到(靠技能增强)则禁吃
+	if captured != null and perks4[captured["side"]].has("shenpan2"):
+		var pure_ok4 := false
+		var perks_none: Array = [{}, {}, {}, {}]
+		for pure_m in R.raw_moves4(board, from, perks_none):
+			if pure_m == to:
+				pure_ok4 = true
+				break
+		if not pure_ok4:
+			_show_status4("审判:敌方不能用技能吃我方棋子")
+			return
 	# 无敌/教皇/恶魔禁吃校验(审判:己方吃子无视敌方效果)
 	var ignores_effect4: bool = perks4[side].has("shenpan")
 	if captured != null and not ignores_effect4:
@@ -4949,7 +4966,41 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 		if occ >= 0:
 			winner4 = occ
 			_show_status4("游戏结束:%s 占领中心获胜!" % SIDE_NAMES4[occ])
+			_show_four_result()
 			queue_redraw()
+
+
+# 四人对局结束:显示结算 + "返回大厅"按钮(联机时所有人可点击回到等候大厅)
+func _show_four_result() -> void:
+	if four_result_root != null:
+		four_result_root.queue_free()
+	four_result_root = Control.new()
+	four_result_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	ui.add_child(four_result_root)
+	var bg := ColorRect.new()
+	bg.color = Color(0.1, 0.1, 0.12, 0.85)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	four_result_root.add_child(bg)
+	var title := _make_label("游戏结束", 40, Color(0.95, 0.85, 0.6))
+	title.position = Vector2(0, 150)
+	title.size = Vector2(1280, 50)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	four_result_root.add_child(title)
+	var sub := _make_label("返回等候大厅", 20, Color(0.85, 0.82, 0.75))
+	sub.position = Vector2(0, 220)
+	sub.size = Vector2(1280, 30)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	four_result_root.add_child(sub)
+	var back_btn := _make_button("返回大厅", Vector2(540, 320), Vector2(200, 52))
+	back_btn.pressed.connect(func():
+		Global.clear_reconnect_info()
+		# 联机:复用连接直接回大厅(大厅场景用同一连接继续)
+		if net_role != "local" and Global.from_lobby:
+			Global.change_scene_with_fade("res://scenes/lobby.tscn")
+		else:
+			Global.change_scene_with_fade("res://scenes/main.tscn")
+	)
+	four_result_root.add_child(back_btn)
 
 
 # 王被吃:按自定义规则处理,返回 "winner"(游戏结束) / "continue"(继续)
@@ -4967,6 +5018,7 @@ func _handle_king_captured4(dead: int, killer: int) -> String:
 		if kill_count4[dead] >= kill_count:
 			winner4 = killer
 			_show_status4("游戏结束:%s 达成 %d 次杀棋,获胜!" % [SIDE_NAMES4[killer], kill_count])
+			_show_four_result()
 			queue_redraw()
 			return "winner"
 		# 被杀方继续(王被吃但按规则不判负,王由杀棋方继承或重生?)
@@ -4996,6 +5048,7 @@ func _handle_king_captured4(dead: int, killer: int) -> String:
 		if occ_winner >= 0:
 			winner4 = occ_winner
 			_show_status4("游戏结束:%s 占领中心获胜!" % SIDE_NAMES4[occ_winner])
+			_show_four_result()
 			queue_redraw()
 			return "winner"
 	var alive_list: Array = []
@@ -5008,6 +5061,7 @@ func _handle_king_captured4(dead: int, killer: int) -> String:
 			_show_status4("游戏结束:%s 获胜!" % SIDE_NAMES4[winner4])
 		else:
 			_show_status4("平局")
+		_show_four_result()
 		queue_redraw()
 		return "winner"
 	return "continue"

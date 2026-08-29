@@ -127,9 +127,6 @@ func _ready() -> void:
 			custom_opts = CustomOptions.new()
 			custom_opts.setup(_font(), func(_r): pass)
 			add_child(custom_opts)
-		else:
-			# 再次打开:弹出动画(首次创建时 setup 内部已有弹入)
-			Global.pop_in(custom_opts)
 		custom_opts.visible = true
 	)
 	add_child(opts_btn)
@@ -158,7 +155,15 @@ func _net_init() -> void:
 	if Global.net_role == "host":
 		var peer := ENetMultiplayerPeer.new()
 		var max_clients: int = (2 if Global.game_mode != "four" else 4) - 1
+		# 端口被占用时自动 +1 尝试其他端口(最多 20 次)
+		var peer := ENetMultiplayerPeer.new()
 		var err := peer.create_server(Global.port, max_clients)
+		var tries := 0
+		while err != OK and tries < 20:
+			Global.port += 1
+			peer = ENetMultiplayerPeer.new()
+			err = peer.create_server(Global.port, max_clients)
+			tries += 1
 		if err != OK:
 			lobby_label.text = "创建房间失败(端口被占用?)"
 			return
@@ -169,7 +174,9 @@ func _net_init() -> void:
 		var prof := Profile.to_net_data()
 		players[1] = {"name": prof.get("username", "玩家"), "avatar_data": prof, "color": -1, "ready": true, "join_order": 0}
 		my_peer = 1
-		print("LOBBY: host ready, max=", max_clients + 1)
+		print("LOBBY: host ready, max=", max_clients + 1, " port=", Global.port)
+		if lobby_label != null:
+			lobby_label.text = "房间已创建(端口 %d),等待玩家加入..." % Global.port
 		_update_ui()
 	else:
 		var peer := ENetMultiplayerPeer.new()

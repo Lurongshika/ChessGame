@@ -75,15 +75,17 @@ static func animate_ui_in(root: Node) -> void:
 		# 已透明(如菜单动画已处理)则跳过
 		if b.modulate.a <= 0.01:
 			continue
+		# 容器内按钮(列表/菜单由容器布局):不做逐个延迟动画,保持原样(避免长列表长时间等待)
+		if _in_container(b):
+			continue
 		b.modulate.a = 0.0
 		var tw := root.create_tween()
 		tw.tween_interval(i * 0.06)
 		tw.tween_property(b, "modulate:a", 1.0, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		# 容器内按钮(由容器布局)只淡入,不动位置;自由定位按钮淡入+上浮
-		if not _in_container(b):
-			var orig_pos: Vector2 = b.position
-			b.position = orig_pos + Vector2(0, 16)
-			tw.parallel().tween_property(b, "position", orig_pos, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		# 自由定位按钮淡入+上浮
+		var orig_pos: Vector2 = b.position
+		b.position = orig_pos + Vector2(0, 16)
+		tw.parallel().tween_property(b, "position", orig_pos, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
 static func _in_container(b: Control) -> bool:
@@ -147,17 +149,14 @@ static func pop_in_layer(root: Control, dur: float = 0.55) -> void:
 		idx += 1
 
 
-# --- 音频(音效 + 循环 BGM) ---
+# --- 音频(音效) ---
 var _audio_player: AudioStreamPlayer
-var _bgm_player: AudioStreamPlayer
 var _sfx_cache := {}
 
 
 func _setup_audio() -> void:
 	_audio_player = AudioStreamPlayer.new()
 	add_child(_audio_player)
-	_bgm_player = AudioStreamPlayer.new()
-	add_child(_bgm_player)
 
 
 # 播放音效(缓存加载)
@@ -175,22 +174,6 @@ func play_sfx(name: String, volume_db: float = 0.0) -> void:
 	_audio_player.stream = stream
 	_audio_player.volume_db = volume_db
 	_audio_player.play()
-
-
-# 循环播放 BGM
-func play_bgm(volume_db: float = -8.0) -> void:
-	if _bgm_player == null:
-		return
-	if _bgm_player.playing:
-		return
-	_bgm_player.stream = load("res://assets/sounds/bgm.mp3")
-	_bgm_player.volume_db = volume_db
-	_bgm_player.play()
-
-
-func stop_bgm() -> void:
-	if _bgm_player != null:
-		_bgm_player.stop()
 
 
 # --- CRT 后处理(全局,参考 CrtTypewriter) ---

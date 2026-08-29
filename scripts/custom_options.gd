@@ -47,7 +47,7 @@ func setup(font: Font, on_change: Callable) -> void:
 	close_btn.size = Vector2(34, 28)
 	close_btn.add_theme_font_override("font", font)
 	close_btn.add_theme_font_size_override("font_size", 16)
-	close_btn.pressed.connect(func(): Global.pop_out(self, 0.3, func(): visible = false))
+	close_btn.pressed.connect(func(): visible = false)
 	panel.add_child(close_btn)
 
 	# 内容放入滚动区(内容较长,超出时可滚动)

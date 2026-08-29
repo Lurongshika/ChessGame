@@ -38,6 +38,7 @@ func _ready() -> void:
 	avatar_preview.size = Vector2(160, 160)
 	avatar_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	avatar_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(avatar_preview)
 	# 头像框
 	var frame := Panel.new()
 	frame.position = Vector2(142, 212)
@@ -59,7 +60,7 @@ func _ready() -> void:
 	upload_tip.size = Vector2(180, 20)
 	add_child(upload_tip)
 
-	# 右侧:颜色偏好(最多 4 个,点击切换选中;12 色 3×4 排列)
+	# 右侧:颜色偏好(最多 4 个,点击切换选中;与等候大厅选色样式一致:色块按钮)
 	var pref_title := _label("颜色偏好(最多 %d 个,开局按此选色)" % MAX_PREFS, 20, Color(0.9, 0.8, 0.6))
 	pref_title.position = Vector2(480, 180)
 	pref_title.size = Vector2(560, 30)
@@ -67,18 +68,26 @@ func _ready() -> void:
 
 	for i in Global.COLORS16.size():
 		var btn := Button.new()
-		btn.position = Vector2(480 + (i % 4) * 130, 225 + (i / 4) * 100)
-		btn.size = Vector2(110, 84)
-		btn.icon = _color_swatch(Global.COLORS16[i], 56)
-		btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		btn.custom_minimum_size = Vector2(48, 48)
+		btn.position = Vector2(480 + (i % 4) * 80, 230 + (i / 4) * 70)
+		btn.size = Vector2(48, 48)
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Global.COLORS16[i]
+		sb.set_corner_radius_all(6)
+		btn.add_theme_stylebox_override("normal", sb)
+		btn.add_theme_stylebox_override("hover", sb)
+		var sbp := StyleBoxFlat.new()
+		sbp.bg_color = Global.COLORS16[i].lightened(0.2)
+		sbp.set_corner_radius_all(6)
+		btn.add_theme_stylebox_override("pressed", sbp)
 		var idx := i
 		btn.pressed.connect(func(): _toggle_pref(idx))
 		add_child(btn)
 		pref_btns.append(btn)
-		# 序号标记(显示偏好顺序)
+		# 序号标记(显示偏好顺序,放在色块右上角)
 		var dot := _label("", 14, Color(0.95, 0.85, 0.6))
-		dot.position = btn.position + Vector2(84, 2)
-		dot.size = Vector2(24, 22)
+		dot.position = btn.position + Vector2(30, -2)
+		dot.size = Vector2(20, 20)
 		dot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		add_child(dot)
 		pref_dots.append(dot)
@@ -156,22 +165,29 @@ func _refresh_avatar_preview() -> void:
 		avatar_preview.texture = null
 
 
-# 刷新颜色按钮高亮 + 偏好顺序数字
+# 刷新颜色按钮高亮 + 偏好顺序数字(与大厅选色一致:色块底色 + 选中金边)
 func _refresh_pref_highlight() -> void:
 	for i in pref_btns.size():
+		var base: Color = Global.COLORS16[i]
 		var sb := StyleBoxFlat.new()
-		sb.bg_color = Color(0.2, 0.19, 0.17)
-		sb.set_corner_radius_all(8)
+		sb.bg_color = base
+		sb.set_corner_radius_all(6)
 		var order := color_prefs.find(i)
 		if order >= 0:
 			sb.border_color = Color(0.95, 0.8, 0.2)
 			sb.set_border_width_all(3)
 		else:
-			sb.border_color = Color(0.4, 0.37, 0.32)
-			sb.set_border_width_all(1)
+			sb.border_color = Color(0, 0, 0, 0)
+			sb.set_border_width_all(0)
 		pref_btns[i].add_theme_stylebox_override("normal", sb)
+		var sbp := StyleBoxFlat.new()
+		sbp.bg_color = base.lightened(0.2)
+		sbp.set_corner_radius_all(6)
+		if order >= 0:
+			sbp.border_color = Color(0.95, 0.8, 0.2)
+			sbp.set_border_width_all(3)
+		pref_btns[i].add_theme_stylebox_override("pressed", sbp)
 		pref_btns[i].add_theme_stylebox_override("hover", sb)
-		pref_btns[i].add_theme_stylebox_override("pressed", sb)
 		pref_dots[i].text = str(order + 1) if order >= 0 else ""
 
 

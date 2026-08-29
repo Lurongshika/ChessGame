@@ -337,22 +337,19 @@ func _add_option_button(text: String, pos: Vector2, cb: Callable) -> void:
 	_animate_option_button(b)
 
 
-# 选项层按钮动画:elastic 回弹 + 淡入 + 上浮(依次出现)
+# 选项层按钮动画:淡入 + 上浮(依次出现,无 elastic)
 func _animate_option_button(b: Button) -> void:
 	var idx := 0
 	for child in opt_root.get_children():
 		if child is Button:
 			idx += 1
-	b.pivot_offset = b.size / 2.0
-	b.scale = Vector2(0.7, 0.7)
 	b.modulate.a = 0.0
 	var orig_pos: Vector2 = b.position
 	b.position = orig_pos + Vector2(0, 14)
 	var tw := create_tween()
 	tw.tween_interval((idx - 1) * 0.06)
-	tw.tween_property(b, "scale", Vector2.ONE, 0.5).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
-	tw.parallel().tween_property(b, "modulate:a", 1.0, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tw.parallel().tween_property(b, "position", orig_pos, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(b, "modulate:a", 1.0, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(b, "position", orig_pos, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
 # 给创建/加入界面的直接按钮补动画(模式/人数/输入框等)
@@ -370,10 +367,8 @@ func _animate_opt_extra_buttons(btns: Array) -> void:
 
 func _close_options() -> void:
 	if opt_root != null:
-		var root := opt_root
+		opt_root.queue_free()
 		opt_root = null
-		# 弹出动画后释放
-		Global.pop_out(root, 0.3, func(): root.queue_free())
 	_set_menu_visible(true)
 	# 返回主界面:重新播放主菜单按钮入场动画(选项层已释放,避免连带动画)
 	call_deferred("_replay_menu_anim")
