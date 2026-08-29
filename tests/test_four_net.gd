@@ -166,7 +166,7 @@ func _run() -> void:
 	_check(not game.controlled_piece4.is_empty(), "四人倒吊人正位:释放后控制权保留")
 	_check(game.controlled_turns4 == 1, "四人倒吊人正位:控制 1 回合")
 
-	# --- 四人星星逆位:使用后不跳回合,获得蓄势,状态同步 ---
+	# --- 四人星星逆位:使用后跳过本回合,获得蓄势,状态同步 ---
 	game.board = R.make_board4()
 	game.perks4 = {0: {"xingxing2": true}, 1: {}, 2: {}, 3: {}}
 	game.turn4 = 2
@@ -175,7 +175,7 @@ func _run() -> void:
 	game.star2_charge4 = {0: 0, 1: 0, 2: 0, 3: 0}
 	var t4_before: int = game.turn4
 	game._activate_skill4("xingxing2", 0)
-	_check(game.turn4 == t4_before, "四人星星逆位:使用后不跳回合")
+	_check(game.turn4 != t4_before, "四人星星逆位:使用后跳过本回合")
 	_check(game.star2_charge4[0] == 2, "四人星星逆位:获得 2 蓄势")
 	var star_data = game._state_to_data4()
 	_check(int(star_data["star2_charge4"]["0"]) == 2, "四人星星逆位:蓄势随状态广播")

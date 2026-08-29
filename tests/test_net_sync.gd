@@ -519,7 +519,7 @@ func _run() -> void:
 	_check(four_has_boost, "四人战车正位:相邻兵可落至车的可落位")
 	scene.four_mode = false
 
-	# --- 星星逆位:使用后不跳过回合,获得蓄势 ---
+	# --- 星星逆位:使用后跳过本回合,获得蓄势 ---
 	scene.net_role = "local"
 	scene.phase = scene.Phase.PLAY
 	scene.turn = R.Side.RED
@@ -529,10 +529,13 @@ func _run() -> void:
 	scene._setup_board()
 	scene.star2_charge = {0: 0, 1: 0}
 	scene.skill_cd = {0: {}, 1: {}}
+	var turn_before_xx: int = scene.turn
 	scene._activate_skill("xingxing2", R.Side.RED)
-	_check(scene.turn == R.Side.RED, "星星逆位:使用后不跳过本回合")
+	_check(scene.turn != turn_before_xx, "星星逆位:使用后跳过本回合")
 	_check(scene.star2_charge[R.Side.RED] == 2, "星星逆位:获得 2 蓄势")
-	# 星星逆位:兵可免费移动一格(蓝色落位)
+	# 星星逆位:兵可免费移动一格(蓝色落位,下回合红方行动时)
+	scene.turn = R.Side.RED
+	scene.actions_left = 2
 	scene._select(Vector2i(0, 6))  # 红兵
 	var star_free_ok := false
 	for m in scene.free_retreat_targets:

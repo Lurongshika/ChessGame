@@ -712,12 +712,11 @@ func _activate_skill4(perk_id: String, side: int) -> void:
 			_show_status4("倒吊人:跳过本回合,下回合起控制其他方所有棋子三回合")
 			_consume_turn_after_skill4()
 		"xingxing2":
-			# 星星逆位:获得 2 蓄势(每蓄势可免费移动一个兵),不跳过本回合
+			# 星星逆位:获得 2 蓄势(每蓄势可免费移动一个兵),跳过本回合
 			star2_charge4[side] += 2
 			_apply_skill_cd4(perk_id, side)
-			_show_status4("星星:获得 2 蓄势(可免费移动 2 个兵)")
-			queue_redraw()
-			_update_status4()
+			_show_status4("星星:获得 2 蓄势(可免费移动 2 个兵),跳过本回合")
+			_consume_turn_after_skill4()
 		_:
 			_show_status4("[%s] 该主动技能暂未实现" %  perks_data[perk_id]["name"])
 	# 联机主机:本地释放技能后广播屏幕中央提醒(其他端执行时由各入口补广播)
@@ -2347,12 +2346,11 @@ func _apply_net_skill(perk_id: String, params: Dictionary) -> void:
 		"siwang2":
 			_skill_death2(side)
 		"xingxing2":
-			# 星星逆位:获得 2 蓄势,不跳过本回合
+			# 星星逆位:获得 2 蓄势,跳过本回合
 			star2_charge[side] += 2
 			_apply_skill_cd("xingxing2", side)
-			status_label.text = "星星:获得 2 蓄势(可免费移动 2 个兵)"
-			queue_redraw()
-			_update_ui()
+			status_label.text = "星星:获得 2 蓄势(可免费移动 2 个兵),跳过本回合"
+			_consume_turn_after_skill()
 		"moshushi", "moshushi2":
 			var a := Vector2i(int(params["a"][0]), int(params["a"][1]))
 			var b := Vector2i(int(params["b"][0]), int(params["b"][1]))
@@ -4301,12 +4299,11 @@ func _activate_skill(perk_id: String, side: int) -> void:
 			status_label.text = "倒吊人:跳过本回合,下回合起控制所有对方棋子三回合"
 			_consume_turn_after_skill()
 		"xingxing2":
-			# 星星逆位:获得 2 蓄势(每蓄势可免费移动一个兵),不跳过本回合
+			# 星星逆位:获得 2 蓄势(每蓄势可免费移动一个兵),跳过本回合
 			star2_charge[side] += 2
 			_apply_skill_cd(perk_id, side)
-			status_label.text = "星星:获得 2 蓄势(可免费移动 2 个兵)"
-			queue_redraw()
-			_update_ui()
+			status_label.text = "星星:获得 2 蓄势(可免费移动 2 个兵),跳过本回合"
+			_consume_turn_after_skill()
 		_:
 			status_label.text = "[%s] 该主动技能暂未实现" % perks_data[perk_id]["name"]
 	# 同步技能执行完:补记棋盘快照(异步 targeting 技能在 _done_targeting 补)
