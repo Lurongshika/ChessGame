@@ -699,6 +699,9 @@ func _activate_skill4(perk_id: String, side: int) -> void:
 			_consume_turn_after_skill4()
 		_:
 			_show_status4("[%s] 该主动技能暂未实现" %  perks_data[perk_id]["name"])
+	# 联机主机:本地释放技能后广播屏幕中央提醒(其他端执行时由各入口补广播)
+	if net_role == "host" and Global.from_lobby:
+		notify_skill_used4.rpc(perk_id, side)
 
 
 # 四人:记录技能使用(显示到对局记录)
@@ -2045,6 +2048,15 @@ func _apply_net_skill(perk_id: String, params: Dictionary) -> void:
 				status_label.text = "战车:棋子已移至车可落位"
 			_consume_turn_after_skill()
 	queue_redraw()
+	# 联机:主机执行技能成功后,广播屏幕中央提醒给两端(含本地,重复调用被 _announce_root 拦截)
+	if net_role == "host" and Global.from_lobby:
+		notify_skill_used.rpc(perk_id, R.Side.BLACK)
+
+
+# 主机 → 双方:广播技能释放提醒(屏幕中央大字)
+@rpc("authority", "call_local", "reliable")
+func notify_skill_used(perk_id: String, side: int) -> void:
+	_show_skill_announce(perk_id, side)
 
 
 # 主机 → 客户端:黑方(客户端)的三选一技能选项(附带技能池)
@@ -3869,6 +3881,9 @@ func _activate_skill(perk_id: String, side: int) -> void:
 			status_label.text = "[%s] 该主动技能暂未实现" % perks_data[perk_id]["name"]
 	# 同步技能执行完:补记棋盘快照(异步 targeting 技能在 _done_targeting 补)
 	_snapshot_last_board()
+	# 联机主机:本地释放技能后广播屏幕中央提醒(客户端执行时 _apply_net_skill 里已广播)
+	if net_role == "host" and Global.from_lobby:
+		notify_skill_used.rpc(perk_id, side)
 
 
 # ==================== 主动技能效果 ====================
@@ -5796,6 +5811,12 @@ func on_skill4(perk_id: String, side: int, params: Dictionary) -> void:
 	_broadcast_state4()
 
 
+# 主机 → 所有人:广播技能释放提醒(屏幕中央大字,四人)
+@rpc("authority", "call_local", "reliable")
+func notify_skill_used4(perk_id: String, side: int) -> void:
+	_show_skill_announce(perk_id, side)
+
+
 # 统一执行四人主动技能(host 权威)
 func _execute_skill4(perk_id: String, side: int, params: Dictionary) -> void:
 	if phase != Phase.PLAY:
@@ -5822,6 +5843,7 @@ func _execute_skill4(perk_id: String, side: int, params: Dictionary) -> void:
 				invincible_piece_side4 = side
 				_apply_skill_cd4("huangdi", side)
 				_record_skill4(side, "huangdi")
+				notify_skill_used4.rpc("huangdi", side)
 				_show_status4("皇帝:该子本回合无敌")
 				_consume_turn_after_skill4()
 				queue_redraw()
@@ -5833,6 +5855,7 @@ func _execute_skill4(perk_id: String, side: int, params: Dictionary) -> void:
 				suicide_mark4 = {"pos": pos, "side": side}
 				_apply_skill_cd4("huangdi2", side)
 				_record_skill4(side, "huangdi2")
+				notify_skill_used4.rpc("huangdi2", side)
 				_show_status4("皇帝:标记棋子,被吃时同归于尽")
 				_consume_turn_after_skill4()
 				queue_redraw()
@@ -5846,6 +5869,7 @@ func _execute_skill4(perk_id: String, side: int, params: Dictionary) -> void:
 				siwang_charge4[side] -= 1
 				_destroy_same_type4(pos, side)
 				_record_skill4(side, "siwang")
+				notify_skill_used4.rpc("siwang", side)
 				_consume_turn_after_skill4()
 				queue_redraw()
 				return
@@ -5857,6 +5881,7 @@ func _execute_skill4(perk_id: String, side: int, params: Dictionary) -> void:
 				controlled_turns4 = 3 if perk_id == "diaodiao2" else 1
 				_apply_skill_cd4(perk_id, side)
 				_record_skill4(side, perk_id)
+				notify_skill_used4.rpc(perk_id, side)
 				_show_status4("倒吊人:获得对方棋子控制权")
 				_consume_turn_after_skill4()
 				queue_redraw()
