@@ -240,7 +240,7 @@ func _run() -> void:
 	_check(game.turn4 != turn_before, "四人:技能消耗回合后 turn4 切换")
 	_check(int(game._state_to_data4()["turn4"]) == game.turn4, "四人:广播状态 turn4 与本地一致")
 
-	# --- 四人倒吊人正位:释放后控制权保留(不再被回合切换清空) ---
+	# --- 四人倒吊人正位:切换操控模式(己方↔非己方),使用后跳过本回合 ---
 	game.net_role = "host"
 	game.four_mode = true
 	game.phase = game.Phase.PLAY
@@ -251,20 +251,19 @@ func _run() -> void:
 	game.skill_cd4 = {0: {}, 1: {}, 2: {}, 3: {}}
 	game.controlled_piece4 = {}
 	game.controlled_turns4 = 0
+	game.control_foreign4 = {0: false, 1: false, 2: false, 3: false}
 	game._activate_skill4("diaodiao", 0)
-	# 选一个黑方非将棋子
-	var target4 := Vector2i(-1, -1)
-	for rr in 17:
-		for cc in 17:
-			var q = game.board[rr][cc]
-			if q != null and q["side"] == 1 and q["type"] != R.Type.KING:
-				target4 = Vector2i(cc, rr)
-				break
-		if target4.x >= 0:
-			break
-	game._handle_puppet_target4(target4, 0, "diaodiao")
-	_check(not game.controlled_piece4.is_empty(), "四人倒吊人正位:释放后控制权保留")
-	_check(game.controlled_turns4 == 1, "四人倒吊人正位:控制 1 回合")
+	_check(game.control_foreign4[0], "四人倒吊人正位:使用后切换为操控非己方棋子")
+	_check(game.turn4 != 2, "四人倒吊人正位:使用后跳过本回合")
+	# 再次使用:切回己方
+	var t4_again: int = game.turn4
+	game.actions_left4 = 1
+	game.turn4 = t4_again
+	game.skill_cd4 = {0: {}, 1: {}, 2: {}, 3: {}}
+	game._activate_skill4("diaodiao", 0)
+	_check(not game.control_foreign4[0], "四人倒吊人正位:再次使用切回操控己方")
+	# 清理切换状态,避免影响后续测试
+	game.control_foreign4 = {0: false, 1: false, 2: false, 3: false}
 
 	# --- 四人星星逆位:使用后跳过本回合,获得蓄势,状态同步 ---
 	game.board = R.make_board4()

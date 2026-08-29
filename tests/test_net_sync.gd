@@ -180,6 +180,49 @@ func _run() -> void:
 	_check(scene.turn == R.Side.BLACK, "隐者:指定两子后消耗回合轮到对方")
 	_check(int(scene._state_to_data()["turn"]) == R.Side.BLACK, "隐者:广播状态为对方回合")
 
+	# --- 倒吊人(正位):切换操控模式(己方↔非己方),使用后跳过本回合 ---
+	scene.net_role = "host"
+	scene.phase = scene.Phase.PLAY
+	scene.turn = R.Side.RED
+	scene.perks_red = {"diaodiao": true}
+	scene.perks_black = {}
+	scene._setup_board()
+	scene.actions_left = 1
+	scene.control_foreign = {0: false, 1: false}
+	scene._activate_skill("diaodiao", R.Side.RED)
+	_check(scene.control_foreign[R.Side.RED], "倒吊人:使用后切换为操控非己方棋子")
+	_check(scene.turn == R.Side.BLACK, "倒吊人:使用后跳过本回合")
+	# 序列化往返:control_foreign 随状态广播
+	var dd_data = scene._state_to_data()
+	scene.control_foreign = {0: false, 1: false}
+	scene._apply_state_data(dd_data)
+	_check(scene.control_foreign[R.Side.RED], "倒吊人:广播后操控模式保留")
+	# 切换模式下不能操作己方棋子,可操作非己方棋子
+	scene.turn = R.Side.RED
+	scene.control_foreign = {0: true, 1: false}
+	scene.actions_left = 1
+	# 找黑方一子(非将)与红方一子
+	var d_target := Vector2i(-1, -1)
+	var d_own := Vector2i(-1, -1)
+	for rr in R.ROWS:
+		for cc in R.COLS:
+			var q = scene.board[rr][cc]
+			if q == null:
+				continue
+			if q["side"] == R.Side.BLACK and q["type"] != R.Type.KING and d_target.x < 0:
+				d_target = Vector2i(cc, rr)
+			if q["side"] == R.Side.RED and d_own.x < 0:
+				d_own = Vector2i(cc, rr)
+	# 红方回合(操控非己方模式):移动己方红子应被拒
+	var own_mv: Array = R.legal_moves(scene.board, d_own, scene.perks_red, scene.perks_black)
+	if not own_mv.is_empty():
+		_check(not scene._validate_move(d_own, own_mv[0], "move", R.Side.RED), "倒吊人:切换模式下不能操作己方棋子")
+	# 操控黑子可移动
+	var foreign_mv: Array = R.legal_moves(scene.board, d_target, scene.perks_red, scene.perks_black)
+	if not foreign_mv.is_empty():
+		_check(scene._validate_move(d_target, foreign_mv[0], "move", R.Side.RED), "倒吊人:切换模式下可操控非己方棋子")
+	scene.control_foreign = {0: false, 1: false}
+
 	# --- 命运之轮(正位):释放后不跳过回合 ---
 	scene.net_role = "host"
 	scene.phase = scene.Phase.PLAY
@@ -494,7 +537,7 @@ func _run() -> void:
 		"huangdi": true, "huangdi2": true,
 		"siwang": true,
 		"zhanche": false, "zhanche2": false,  # 战车已改为被动(整局走法强化)
-		"diaodiao": true,
+		"diaodiao": false,  # 倒吊人已改为切换操控模式(非目标型,直接切换)
 		"yinzhe": true,  # 隐者已改为指定两子(目标型)
 		# 非目标型(直接发请求,host 端执行):隐者逆位/倒吊人逆位/女祭司/愚者等
 		"yinzhe2": false,

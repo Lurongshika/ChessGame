@@ -69,6 +69,7 @@ var controlled_turns := 0       # 倒吊人:控制权剩余回合数
 var controlled_all_turns := 0   # 倒吊人逆位:全棋子控制剩余回合数(释放后跳过本回合,下回合起生效)
 var controlled_all_owner := -1  # 倒吊人逆位:全棋子控制权归属方
 var _controlled_moved: Array[Vector2i] = []  # 倒吊人逆位:本回合已移动的对方棋子
+var control_foreign := {0: false, 1: false}  # 倒吊人(正位):该方是否处于"只能操控非己方棋子"模式
 var pope_guarded := {}          # 教皇:象 5×5 范围内己方棋子(获得无敌) -> {pos: true}
 var pope_countered := {}        # 教皇逆位:象 5×5 范围内的子(获得反制) -> {pos: true}
 var undo_snapshot := {}         # 图鉴演示:悔棋前完整状态快照(供撤销悔棋)
@@ -108,6 +109,7 @@ var controlled_turns4 := 0
 var controlled_all_turns4 := 0   # 四人:倒吊人逆位全棋子控制剩余回合数
 var controlled_all_owner4 := -1  # 四人:全棋子控制权归属方
 var _controlled_moved4: Array[Vector2i] = []  # 四人:本回合已移动的对方棋子
+var control_foreign4 := {0: false, 1: false, 2: false, 3: false}  # 四人:倒吊人(正位)操控非己方棋子模式
 var pope_guarded4 := {}
 var pope_countered4 := {}       # 四人:教皇逆位象 5×5 范围内的子(获得反制)
 var extra_turn4 := {0: false, 1: false, 2: false, 3: false}
@@ -708,8 +710,14 @@ func _activate_skill4(perk_id: String, side: int) -> void:
 			_skill_justice2_4(side)
 		"siwang2":
 			_skill_death2_4(side)
-		"moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "diaodiao", "yinzhe":
+		"moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "yinzhe":
 			_start_targeting4(perk_id, side)
+		"diaodiao":
+			# 正位:切换操控模式(己方↔非己方),跳过本回合
+			control_foreign4[side] = not control_foreign4[side]
+			_apply_skill_cd4(perk_id, side)
+			_show_status4("倒吊人:切换为操控%s棋子" % ("非己方" if control_foreign4[side] else "己方"))
+			_consume_turn_after_skill4()
 		"diaodiao2":
 			# 逆位:跳过本回合,下回合起获得其他所有方棋子控制权三回合
 			controlled_all_turns4 = 3
@@ -2230,6 +2238,7 @@ func _state_to_data() -> Dictionary:
 		"controlled_turns": controlled_turns,
 		"controlled_all_turns": controlled_all_turns,
 		"controlled_all_owner": controlled_all_owner,
+		"control_foreign": {"0": control_foreign[0], "1": control_foreign[1]},
 		"pope_guarded": _pope_to_data(),
 		"pope_countered": _pope2_to_data(),
 		"move_history": _moves_to_json(),
@@ -2327,6 +2336,7 @@ func _apply_state_data(data: Dictionary) -> void:
 	controlled_turns = int(data.get("controlled_turns", 0))
 	controlled_all_turns = int(data.get("controlled_all_turns", 0))
 	controlled_all_owner = int(data.get("controlled_all_owner", -1))
+	control_foreign = {0: bool(data.get("control_foreign", {}).get("0", false)), 1: bool(data.get("control_foreign", {}).get("1", false))}
 	pope_guarded = {}
 	for pg in data.get("pope_guarded", []):
 		pope_guarded[Vector2i(int(pg[0]), int(pg[1]))] = true
@@ -2475,23 +2485,19 @@ func _apply_net_skill(perk_id: String, params: Dictionary) -> void:
 			siwang_charge[side] -= 1
 			_destroy_same_type(pos, side)
 			_consume_turn_after_skill()
-		"diaodiao", "diaodiao2":
-			if perk_id == "diaodiao2":
-				# 逆位:跳过本回合,下回合起获得所有对方棋子控制权三回合
-				controlled_all_turns = 3
-				controlled_all_owner = side
-				_apply_skill_cd(perk_id, side)
-				status_label.text = "倒吊人:跳过本回合,下回合起控制所有对方棋子三回合"
-				_consume_turn_after_skill()
-				return
-			var pos := Vector2i(int(params["pos"][0]), int(params["pos"][1]))
-			var p = board[pos.y][pos.x]
-			if p == null or p["side"] == side:
-				return
-			controlled_piece = {"pos": pos, "owner": side}
-			controlled_turns = 1
+		"diaodiao2":
+			# 逆位:跳过本回合,下回合起获得所有对方棋子控制权三回合
+			controlled_all_turns = 3
+			controlled_all_owner = side
 			_apply_skill_cd(perk_id, side)
-			status_label.text = "倒吊人:获得对方棋子控制权一回合"
+			status_label.text = "倒吊人:跳过本回合,下回合起控制所有对方棋子三回合"
+			_consume_turn_after_skill()
+			return
+		"diaodiao":
+			# 正位:切换操控模式(己方↔非己方),跳过本回合
+			control_foreign[side] = not control_foreign[side]
+			_apply_skill_cd(perk_id, side)
+			status_label.text = "倒吊人:切换为操控%s棋子" % ("非己方" if control_foreign[side] else "己方")
 			_consume_turn_after_skill()
 		"zhanche", "zhanche2":
 			var piece := Vector2i(int(params["piece"][0]), int(params["piece"][1]))
@@ -2718,7 +2724,14 @@ func _validate_move(from: Vector2i, to: Vector2i, kind: String, side: int) -> bo
 	# 倒吊人逆位:全棋子控制期可移动对方任意棋子(每子每回合一次)
 	var all_control: bool = controlled_all_turns > 0 and controlled_all_owner == turn
 	var is_controlled: bool = (not controlled_piece.is_empty() and from == controlled_piece.get("pos", Vector2i(-1, -1)) and controlled_piece.get("owner", -1) == turn) or (all_control and p["side"] != side)
-	if p["side"] != side and not is_controlled:
+	# 倒吊人正位:切换操控模式——只能操控非己方棋子(被操控棋子可吃子)
+	var foreign_mode: bool = control_foreign[turn] and p["side"] != side
+	if control_foreign[turn]:
+		if p["side"] == side:
+			return false  # 切换模式下不能操作己方棋子
+		if from in _controlled_moved:
+			return false  # 每子每回合只能移动一次
+	elif p["side"] != side and not is_controlled:
 		return false
 	# 全控制:每子每回合只能移动一次
 	if all_control and p["side"] != side and from in _controlled_moved:
@@ -2733,8 +2746,11 @@ func _validate_move(from: Vector2i, to: Vector2i, kind: String, side: int) -> bo
 			in_legal = to in _chariot_boost_moves(from, side)
 		if not in_legal:
 			return false
-		# 全控制/单子控制:被控子不能吃子
-		if is_controlled and board[to.y][to.x] != null:
+		# 全控制/单子控制:被控子不能吃子;倒吊人正位切换模式操控的非己方棋子可以吃子
+		if is_controlled and not foreign_mode and board[to.y][to.x] != null:
+			return false
+		# 正位切换模式:操控的非己方棋子不能吃操控方自己的王(避免自灭/胜负错乱)
+		if foreign_mode and board[to.y][to.x] != null and board[to.y][to.x]["type"] == R.Type.KING and board[to.y][to.x]["side"] == side:
 			return false
 		# 审判逆位:敌方吃我方棋子时,判断"去掉技能后能否吃到";纯规则吃不到(靠技能增强)则禁吃
 		if board[to.y][to.x] != null and perks_of(board[to.y][to.x]["side"]).has("shenpan2"):
@@ -3323,6 +3339,9 @@ func _begin_turn() -> void:
 		_controlled_moved = []
 		if controlled_all_turns <= 0:
 			controlled_all_owner = -1
+	# 倒吊人正位:切换操控模式(每子每回合限移一次)
+	if control_foreign[turn]:
+		_controlled_moved = []
 	# 恶魔逆位:免疫回合递减(被吃方)
 	for s in [0, 1]:
 		if emo2_turns[s] > 0:
@@ -3550,6 +3569,11 @@ func _perform_move(from: Vector2i, to: Vector2i) -> void:
 	if controlled_all_turns > 0 and controlled_all_owner == turn:
 		var mover_p = board[to.y][to.x]
 		if mover_p != null and mover_p["side"] != turn:
+			_controlled_moved.append(from)
+	# 倒吊人正位:切换操控模式——记录已移动的非己方棋子(每子每回合限移一次)
+	if control_foreign[turn]:
+		var mover_f = board[to.y][to.x]
+		if mover_f != null and mover_f["side"] != turn:
 			_controlled_moved.append(from)
 	if captured != null:
 		hidden_pieces.erase(to)  # 吃掉目标位置的隐身子时,清除其隐身标记
@@ -4329,7 +4353,7 @@ func _on_perk_clicked(perk_id: String, side: int) -> void:
 
 
 func _is_targeting_skill(perk_id: String) -> bool:
-	return perk_id in ["moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "diaodiao", "yinzhe"]
+	return perk_id in ["moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "yinzhe"]
 
 
 func _is_active_skill(perk_id: String) -> bool:
@@ -4431,8 +4455,14 @@ func _activate_skill(perk_id: String, side: int) -> void:
 			_skill_justice2(side)
 		"siwang2":
 			_skill_death2(side)
-		"moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "diaodiao", "yinzhe":
+		"moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "yinzhe":
 			_start_targeting(perk_id, side)
+		"diaodiao":
+			# 正位:切换操控模式(己方↔非己方),跳过本回合
+			control_foreign[side] = not control_foreign[side]
+			_apply_skill_cd(perk_id, side)
+			status_label.text = "倒吊人:切换为操控%s棋子" % ("非己方" if control_foreign[side] else "己方")
+			_consume_turn_after_skill()
 		"diaodiao2":
 			# 逆位:跳过本回合,下回合起获得所有对方棋子控制权三回合
 			controlled_all_turns = 3
@@ -5049,8 +5079,10 @@ func _is_human_turn() -> bool:
 func _handle_click(pos: Vector2i) -> void:
 	var p = board[pos.y][pos.x]
 	var is_controlled: bool = not controlled_piece.is_empty() and pos == controlled_piece.get("pos", Vector2i(-1, -1)) and controlled_piece.get("owner", -1) == turn
+	# 倒吊人正位:切换操控模式——只能操控非己方棋子
+	var can_operate: bool = p != null and (p["side"] == turn or is_controlled or (control_foreign[turn] and p["side"] != turn))
 	if selected.x < 0:
-		if p != null and (p["side"] == turn or is_controlled):
+		if can_operate:
 			_select(pos)
 		return
 	if pos == selected:
@@ -5066,7 +5098,7 @@ func _handle_click(pos: Vector2i) -> void:
 	if pos in moves_cache:
 		_try_perform(selected, pos, "move")
 		return
-	if p != null and (p["side"] == turn or is_controlled):
+	if can_operate:
 		_select(pos)
 	else:
 		_clear_selection()
@@ -5109,6 +5141,8 @@ func _select(pos: Vector2i) -> void:
 	var self_hidden: bool = hidden_pieces.has(pos)
 	# 倒吊人:控制权棋子移动时不能吃子(进阶)
 	var controlled_move: bool = controlled_turns > 0 and not controlled_piece.is_empty() and pos == controlled_piece.get("pos", Vector2i(-1, -1))
+	# 倒吊人正位:切换操控模式——选中的是非己方棋子
+	var foreign_sel: bool = control_foreign[turn] and board[pos.y][pos.x] != null and board[pos.y][pos.x]["side"] != turn
 	# 过滤受保护目标:皇后无敌 / 皇帝指定无敌 / 教皇象无敌 / 恶魔禁同类型连续吃
 	if not moves_cache.is_empty():
 		var filtered: Array[Vector2i] = []
@@ -5125,6 +5159,9 @@ func _select(pos: Vector2i) -> void:
 					continue  # 隐身的子不能吃子
 				if controlled_move:
 					continue  # 控制权(进阶):不能吃子
+				# 正位切换模式:操控的非己方棋子不能吃操控方自己的王
+				if foreign_sel and ts == turn and board[m.y][m.x]["type"] == R.Type.KING:
+					continue
 			filtered.append(m)
 		moves_cache = filtered
 	free_retreat_targets = []
@@ -5706,12 +5743,13 @@ func _handle_input4(event: InputEvent) -> void:
 		if my_side4 < 0 or current_side4() != my_side4:
 			return
 	var side := current_side4()
-	# 倒吊人逆位:全控制期可操作其他方棋子
+	# 倒吊人逆位:全控制期可操作其他方棋子;正位:切换操控模式(只能操控非己方棋子)
 	var all_control4: bool = controlled_all_turns4 > 0 and controlled_all_owner4 == side
+	var foreign4: bool = control_foreign4[side]
 	# 用旋转后的逻辑坐标查棋盘(原始 c,r 是显示坐标,旋转后对应别的格子)
 	var p = board[pos.y][pos.x] if R.in_board(pos, board) else null
 	if net_role != "local" and Global.from_lobby:
-		if p != null and p["side"] != my_side4 and selected4.x < 0 and not (all_control4 and p["side"] != my_side4):
+		if p != null and p["side"] != my_side4 and selected4.x < 0 and not (all_control4 and p["side"] != my_side4) and not (foreign4 and p["side"] != my_side4):
 			return
 	if selected4.x >= 0:
 		# 免费移动优先:星星兵落点即使也在普通走法里,也应免费执行
@@ -5721,7 +5759,7 @@ func _handle_input4(event: InputEvent) -> void:
 		if pos in moves4:
 			_try_move4(selected4, pos, "move")
 			return
-		if p != null and (p["side"] == side or all_control4):
+		if p != null and (p["side"] == side or all_control4 or (foreign4 and p["side"] != side)):
 			_select4(pos)
 			return
 		selected4 = Vector2i(-1, -1)
@@ -5729,7 +5767,7 @@ func _handle_input4(event: InputEvent) -> void:
 		free_retreat4_targets = []
 		queue_redraw()
 		return
-	if p != null and (p["side"] == side or all_control4):
+	if p != null and (p["side"] == side or all_control4 or (foreign4 and p["side"] != side)):
 		_select4(pos)
 
 
@@ -5747,15 +5785,17 @@ func _select4(pos: Vector2i) -> void:
 	moves4 = R.raw_moves4(board, pos, perks_arr)
 	# 过滤:四角不可到达(棋盘四角没有渲染线)
 	var filtered: Array = []
-	# 隐者:隐身的子不能吃子(只能移动);倒吊人逆位:全控制棋子不能吃子
+	# 隐者:隐身的子不能吃子(只能移动);倒吊人逆位:全控制棋子不能吃子;正位切换模式操控的非己方棋子可吃子
 	var self_hidden4: bool = hidden_pieces4.has(pos)
 	var all_control4: bool = controlled_all_turns4 > 0 and controlled_all_owner4 == current_side4()
+	var foreign4: bool = control_foreign4[current_side4()]
 	var mover_side4: int = board[pos.y][pos.x]["side"] if board[pos.y][pos.x] != null else -1
 	var controlled4: bool = all_control4 and mover_side4 != current_side4()
+	var foreign_sel4: bool = foreign4 and mover_side4 != current_side4()
 	for m in moves4:
 		if _is_corner4(m):
 			continue
-		# 隐身子 / 全控制棋子:只能移到空位,不能吃子
+		# 隐身子 / 逆位全控制棋子:只能移到空位,不能吃子
 		if board[m.y][m.x] != null and (self_hidden4 or controlled4):
 			continue
 		# 过滤受保护目标:皇后无敌 / 皇帝指定无敌 / 教皇象无敌
@@ -5764,6 +5804,9 @@ func _select4(pos: Vector2i) -> void:
 			if invincible_side4 == ts4 or m == invincible_piece4:
 				continue
 			if pope_guarded4.has(m):
+				continue
+			# 正位切换模式:操控的非己方棋子不能吃操控方自己的王
+			if foreign_sel4 and ts4 == current_side4() and board[m.y][m.x]["type"] == R.Type.KING:
 				continue
 		filtered.append(m)
 	moves4 = filtered
@@ -5851,8 +5894,11 @@ func _try_move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 		var side := current_side4()
 		var p = board[from.y][from.x]
 		var all_ctrl4: bool = controlled_all_turns4 > 0 and controlled_all_owner4 == side
-		if p == null or (p["side"] != side and not all_ctrl4):
+		var foreign4: bool = control_foreign4[side]
+		if p == null or (p["side"] != side and not all_ctrl4 and not (foreign4 and p["side"] != side)):
 			return
+		if foreign4 and p["side"] != side and from in _controlled_moved4:
+			return  # 正位切换模式:每子每回合限移一次
 		var in_legal4: bool = to in R.raw_moves4(board, from, [perks4[0], perks4[1], perks4[2], perks4[3]])
 		# 战车(被动·整局):与车相邻的棋子可落至车的可落位;选中车时可落至相邻子(含敌方)的可落位
 		if not in_legal4:
@@ -5880,12 +5926,15 @@ func _try_move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 			return
 		if not in_legal4:
 			return
-		# 全控制:每子每回合限移一次,不能吃子
+		# 逆位全控制:每子每回合限移一次,不能吃子
 		if all_ctrl4 and p["side"] != side:
 			if from in _controlled_moved4:
 				return
 			if board[to.y][to.x] != null:
 				return
+		# 正位切换模式:操控的非己方棋子可吃子,但不能吃操控方自己的王
+		if foreign4 and p["side"] != side and board[to.y][to.x] != null and board[to.y][to.x]["type"] == R.Type.KING and board[to.y][to.x]["side"] == side:
+			return
 		on_move4.rpc(from, to, kind)
 	else:
 		request_move4.rpc_id(1, from, to, kind)
@@ -5900,10 +5949,24 @@ func _move4_rejected(from: Vector2i, to: Vector2i, side: int) -> bool:
 	var mover = board[from.y][from.x]
 	if mover == null:
 		return true
+	# 倒吊人正位切换模式:只能操控非己方棋子;被操控的非己方棋子每子每回合限移一次
+	var cur4_side: int = current_side4()
+	var foreign4: bool = control_foreign4[cur4_side] and mover["side"] != cur4_side
+	if control_foreign4[cur4_side]:
+		if mover["side"] == cur4_side:
+			return true  # 切换模式下不能操作己方棋子
+		if from in _controlled_moved4:
+			return true  # 每子每回合只能移动一次
+	# 逆位全控制:每子每回合限移一次
+	if controlled_all_turns4 > 0 and controlled_all_owner4 == cur4_side and mover["side"] != cur4_side and from in _controlled_moved4:
+		return true
 	# 隐者:隐身的子不能吃子(可移动到空格)
 	if hidden_pieces4.has(from) and board[to.y][to.x] != null:
 		return true
 	var captured = board[to.y][to.x]
+	# 正位切换模式:操控的非己方棋子可吃子,但不能吃操控方自己的王
+	if foreign4 and captured != null and captured["type"] == R.Type.KING and captured["side"] == cur4_side:
+		return true
 	# 审判逆位:敌方吃我方棋子时,判断"去掉技能后能否吃到";纯规则吃不到(靠技能增强)则禁吃
 	if captured != null and perks4[captured["side"]].has("shenpan2"):
 		var pure_ok4 := false
@@ -5972,6 +6035,11 @@ func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 	if controlled_all_turns4 > 0 and controlled_all_owner4 == current_side4():
 		var mover_after = board[to.y][to.x]
 		if mover_after != null and mover_after["side"] != current_side4():
+			_controlled_moved4.append(from)
+	# 倒吊人正位:切换操控模式——记录已移动的非己方棋子(每子每回合限移一次)
+	if control_foreign4[current_side4()]:
+		var mover_f4 = board[to.y][to.x]
+		if mover_f4 != null and mover_f4["side"] != current_side4():
 			_controlled_moved4.append(from)
 	selected4 = Vector2i(-1, -1)
 	moves4 = []
@@ -6385,6 +6453,9 @@ func _begin_turn4() -> void:
 		_controlled_moved4 = []
 		if controlled_all_turns4 <= 0:
 			controlled_all_owner4 = -1
+	# 倒吊人正位:切换操控模式(每子每回合限移一次)
+	if control_foreign4[side]:
+		_controlled_moved4 = []
 	# 恶魔逆位:免疫回合递减
 	for s4 in 4:
 		if emo2_turns4[s4] > 0:
@@ -6624,6 +6695,7 @@ func _state_to_data4() -> Dictionary:
 		"star2_charge4": {"0": star2_charge4[0], "1": star2_charge4[1], "2": star2_charge4[2], "3": star2_charge4[3]},
 		"sync_pieces4": _sync_pieces_to_data4(),
 		"controlled_turns4": controlled_turns4,
+		"control_foreign4": {"0": control_foreign4[0], "1": control_foreign4[1], "2": control_foreign4[2], "3": control_foreign4[3]},
 		"pope_guarded4": _pope_to_data4(),
 		"pope_countered4": _pope2_to_data4(),
 		"perks4": perks_all,
@@ -6716,6 +6788,12 @@ func _apply_state_data4(data: Dictionary) -> void:
 	for q in data.get("sync_pieces4", []):
 		sync_pieces4.append(Vector2i(int(q[0]), int(q[1])))
 	controlled_turns4 = int(data.get("controlled_turns4", 0))
+	control_foreign4 = {
+		0: bool(data.get("control_foreign4", {}).get("0", false)),
+		1: bool(data.get("control_foreign4", {}).get("1", false)),
+		2: bool(data.get("control_foreign4", {}).get("2", false)),
+		3: bool(data.get("control_foreign4", {}).get("3", false)),
+	}
 	pope_guarded4 = {}
 	for pg in data.get("pope_guarded4", []):
 		pope_guarded4[Vector2i(int(pg[0]), int(pg[1]))] = true
