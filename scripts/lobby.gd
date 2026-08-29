@@ -153,7 +153,6 @@ func _build_color_palette() -> void:
 
 func _net_init() -> void:
 	if Global.net_role == "host":
-		var peer := ENetMultiplayerPeer.new()
 		var max_clients: int = (2 if Global.game_mode != "four" else 4) - 1
 		# 端口被占用时自动 +1 尝试其他端口(最多 20 次)
 		var peer := ENetMultiplayerPeer.new()
