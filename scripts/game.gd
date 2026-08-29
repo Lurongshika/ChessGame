@@ -3775,7 +3775,7 @@ func _on_perk_clicked(perk_id: String, side: int) -> void:
 
 
 func _is_targeting_skill(perk_id: String) -> bool:
-	return perk_id in ["huangdi", "yinzhe", "siwang", "zhanche", "diaodiao"]
+	return perk_id in ["moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "zhanche", "zhanche2", "diaodiao"]
 
 
 func _is_active_skill(perk_id: String) -> bool:

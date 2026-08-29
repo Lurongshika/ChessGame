@@ -382,6 +382,26 @@ func _run() -> void:
 	_check(not scene.targeting4.get("data", {}).has("a"), "四人:逆位魔术师拒绝交换其他方将/帅")
 	scene.four_mode = false
 
+	# --- 目标型技能完整列表:正逆位都本地选目标(不显示"等待对方确认") ---
+	# 与 _activate_skill/_start_targeting 的 match 分支一致:魔术师/皇帝/战车(含逆位)必须为 true
+	var targeting_expected := {
+		"moshushi": true, "moshushi2": true,
+		"huangdi": true, "huangdi2": true,
+		"siwang": true,
+		"zhanche": true, "zhanche2": true,
+		"diaodiao": true,
+		# 非目标型(直接发请求,host 端执行):隐者/倒吊人逆位/女祭司/愚者等
+		"yinzhe": false, "yinzhe2": false,
+		"diaodiao2": false,
+		"nvjisi": false, "yuzhe": false,
+	}
+	var targeting_ok := true
+	for pid in targeting_expected:
+		if scene._is_targeting_skill(pid) != targeting_expected[pid]:
+			targeting_ok = false
+			printerr("FAIL - 目标型列表 %s 期望 %s 实际 %s" % [pid, targeting_expected[pid], scene._is_targeting_skill(pid)])
+	_check(targeting_ok, "目标型技能列表完整(正逆位都本地选目标,非目标型直接请求)")
+
 	if _failures == 0:
 		print("== NET SYNC OK ==")
 	else:
