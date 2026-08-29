@@ -6,7 +6,7 @@ uniform sampler2D screen_texture : hint_screen_texture, filter_linear;
 
 uniform float scan_intensity : hint_range(0.0, 0.3) = 0.08;
 uniform float curve_val : hint_range(1.0, 10.0) = 4.0;
-uniform float aberration : hint_range(0.0, 0.05) = 0.012;
+uniform float aberration : hint_range(0.0, 0.01) = 0.0012;
 uniform float blur_size : hint_range(0.0, 0.01) = 0.0015;
 uniform float brightness : hint_range(0.8, 1.6) = 1.15;
 
