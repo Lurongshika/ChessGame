@@ -231,13 +231,6 @@ func _show_settings() -> void:
 		ab_val.text = "%.4f" % ab
 	)
 
-	# 实时预览提示
-	var tip := _label("调整即时生效并自动保存", 13, Color(0.6, 0.58, 0.52))
-	tip.position = Vector2(0, 420)
-	tip.size = Vector2(1280, 24)
-	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	opt_root.add_child(tip)
-
 	_animate_opt_extra_buttons([])
 	_add_option_button("返回", Vector2(540, 490), _close_options)
 
