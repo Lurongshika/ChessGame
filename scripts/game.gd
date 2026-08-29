@@ -2796,6 +2796,7 @@ func _perform_move(from: Vector2i, to: Vector2i) -> void:
 			last_eat = {"side": turn, "type": atk["type"] if atk != null else -1}
 		_handle_capture(captured, to, turn)
 		if captured["type"] == R.Type.KING:
+			_snapshot_last_board()
 			_win(turn)
 			return
 	# first_moved 记录棋子移动后的新位置,用于"额外回合不能连移同子"检查
@@ -2803,6 +2804,8 @@ func _perform_move(from: Vector2i, to: Vector2i) -> void:
 	# 命运之轮(进阶):协同棋子移动不消耗步数
 	if not from in sync_pieces:
 		actions_left -= 1
+	# 记录该步执行后的棋盘(含被动技能效果),供复盘/悔棋还原
+	_snapshot_last_board()
 	queue_redraw()
 	if actions_left <= 0:
 		_end_turn()
@@ -2923,6 +2926,7 @@ func _perform_free_retreat(from: Vector2i, to: Vector2i) -> void:
 	selected = Vector2i(-1, -1)
 	moves_cache = []
 	free_retreat_targets = []
+	_snapshot_last_board()
 	queue_redraw()
 	_auto_save()
 	_update_ui()
@@ -2937,6 +2941,7 @@ func _perform_free_elephant(from: Vector2i, to: Vector2i) -> void:
 	selected = Vector2i(-1, -1)
 	moves_cache = []
 	free_elephant_targets = []
+	_snapshot_last_board()
 	queue_redraw()
 	_auto_save()
 	_update_ui()
@@ -2977,10 +2982,16 @@ func _undo_ai_move() -> void:
 		removed += 1
 	if removed == 0:
 		return
-	# 从开局快照重放剩余走子
+	# 从开局快照重放剩余走子(有快照的用快照,含技能/被动效果)
 	board = _clone_board(initial_snapshot["board"])
 	for m in move_history:
-		board = R.apply_move(board, m["from"], m["to"])["board"]
+		var snap = m.get("board_after")
+		if snap != null:
+			board = _clone_board(snap)
+		elif m.get("kind", "move") == "skill":
+			pass  # 旧存档技能记录无快照:保持原棋盘
+		else:
+			board = R.apply_move(board, m["from"], m["to"])["board"]
 	# 重置回合状态(轮到红方,红方开始新回合)
 	turn = R.Side.RED
 	var max_turn := {0: 0, 1: 0}
@@ -3026,17 +3037,25 @@ func _record_move(from: Vector2i, to: Vector2i, kind: String) -> void:
 	var side: int = p["side"]
 	var name: String = R.PIECE_NAMES[p["type"]] if side == R.Side.RED else R.PIECE_NAMES_BLACK[p["type"]]
 	# 记录当前走子方的真实回合序号(速度取胜等加行动技能时,同回合多步共享同一序号)
-	move_history.append({"from": from, "to": to, "kind": kind, "side": side, "name": name, "turn": turn_counts[turn]})
+	move_history.append({"from": from, "to": to, "kind": kind, "side": side, "name": name, "turn": turn_counts[turn], "board_after": null})
 	_refresh_move_log()
 
 
-# 记录技能使用(双人):kind=skill, name=技能名
+# 记录技能使用(双人):kind=skill, name=技能名;board_after 由 _snapshot_last_board 补记
 func _record_skill(side: int, perk_id: String) -> void:
 	if replay_mode:
 		return
 	var nm: String = perks_data[perk_id]["name"] if perks_data.has(perk_id) else perk_id
-	move_history.append({"from": Vector2i(-1, -1), "to": Vector2i(-1, -1), "kind": "skill", "side": side, "name": nm, "turn": turn_counts[side]})
+	move_history.append({"from": Vector2i(-1, -1), "to": Vector2i(-1, -1), "kind": "skill", "side": side, "name": nm, "turn": turn_counts[side], "board_after": null})
 	_refresh_move_log()
+
+
+# 记录完成后:把当前棋盘快照存入最后一条历史记录(走子/技能都可),供复盘/悔棋还原
+func _snapshot_last_board() -> void:
+	if replay_mode or move_history.is_empty():
+		return
+	var last = move_history[-1]
+	last["board_after"] = _clone_board(board)
 
 
 func _refresh_move_log() -> void:
@@ -3104,28 +3123,36 @@ func _board_from_json(data: Array) -> Array:
 func _moves_to_json() -> Array:
 	var arr: Array = []
 	for m in move_history:
-		arr.append({
+		var entry := {
 			"from": [m["from"].x, m["from"].y],
 			"to": [m["to"].x, m["to"].y],
 			"kind": m["kind"],
 			"side": m.get("side", 0),
 			"name": m.get("name", "?"),
 			"turn": m.get("turn", -1),
-		})
+		}
+		# 技能记录:序列化棋盘快照(复盘还原技能造成的棋盘变化)
+		if m.get("kind", "move") == "skill" and m.get("board_after") != null:
+			entry["board_after"] = _board_to_json(m["board_after"])
+		arr.append(entry)
 	return arr
 
 
 func _moves_from_json(arr: Array) -> Array:
 	var moves: Array = []
 	for m in arr:
-		moves.append({
+		var entry := {
 			"from": Vector2i(int(m["from"][0]), int(m["from"][1])),
 			"to": Vector2i(int(m["to"][0]), int(m["to"][1])),
 			"kind": m["kind"],
 			"side": int(m.get("side", 0)),
 			"name": m.get("name", "?"),
 			"turn": int(m.get("turn", -1)),
-		})
+			"board_after": null,
+		}
+		if m.get("kind", "move") == "skill" and m.has("board_after") and m["board_after"] != null:
+			entry["board_after"] = _board_from_json(m["board_after"])
+		moves.append(entry)
 	return moves
 
 
@@ -3243,7 +3270,14 @@ func _apply_replay() -> void:
 	replay_board = _clone_board(initial_snapshot["board"])
 	for i in replay_index:
 		var m = move_history[i]
-		replay_board = R.apply_move(replay_board, m["from"], m["to"])["board"]
+		var snap = m.get("board_after")
+		if snap != null:
+			# 优先用执行后的棋盘快照(含技能/被动效果)
+			replay_board = _clone_board(snap)
+		elif m.get("kind", "move") == "skill":
+			pass  # 旧存档技能记录无快照:保持原棋盘
+		else:
+			replay_board = R.apply_move(replay_board, m["from"], m["to"])["board"]
 	if replay_label != null:
 		replay_label.text = "复盘 第 %d / %d 步" % [replay_index, move_history.size()]
 	queue_redraw()
@@ -3530,6 +3564,8 @@ func _activate_skill(perk_id: String, side: int) -> void:
 			_start_targeting(perk_id, side)
 		_:
 			status_label.text = "[%s] 该主动技能暂未实现" % perks_data[perk_id]["name"]
+	# 同步技能执行完:补记棋盘快照(异步 targeting 技能在 _done_targeting 补)
+	_snapshot_last_board()
 
 
 # ==================== 主动技能效果 ====================
@@ -4000,6 +4036,8 @@ func _destroy_same_type(pos: Vector2i, side: int) -> void:
 func _done_targeting() -> void:
 	targeting = {}
 	_clear_selection()
+	# targeting 技能执行完:补记棋盘快照(供复盘/悔棋还原技能造成的棋盘变化)
+	_snapshot_last_board()
 
 
 

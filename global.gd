@@ -19,7 +19,7 @@ var from_lobby := false     # 是否从等候大厅进入对局(复用大厅连�
 const SETTINGS_PATH := "user://settings.json"
 var crt_strength := 0.4     # CRT 效果强度(0.0-1.0,默认 40%)
 var crt_aberration := 0.0005  # CRT 红蓝偏移(色差,0.0-0.01,默认 0.0005)
-var crt_curve := 3.85       # CRT 画面曲率(1.0-20.0,越小越弯,默认 85%≈3.85)
+var crt_curve := 10.5       # CRT 画面曲率(1.0-20.0,越小越弯,默认 50%≈10.5)
 
 # 16 种棋子颜色预设(大厅选色板与对局棋子共用)
 # 8 种颜色:红蓝绿紫粉青黑橙(黑=黑方棋子色,用于玩家区分)
