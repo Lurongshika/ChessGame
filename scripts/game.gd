@@ -4499,14 +4499,15 @@ func _handle_click(pos: Vector2i) -> void:
 	if pos == selected:
 		_clear_selection()
 		return
-	if pos in moves_cache:
-		_try_perform(selected, pos, "move")
-		return
+	# 免费移动优先:星星(兵)/月亮逆位(象)的落点即使也在普通走法里,也应免费执行
 	if pos in free_retreat_targets:
 		_try_perform(selected, pos, "free_retreat")
 		return
 	if pos in free_elephant_targets:
 		_try_perform(selected, pos, "free_elephant")
+		return
+	if pos in moves_cache:
+		_try_perform(selected, pos, "move")
 		return
 	if p != null and (p["side"] == turn or is_controlled):
 		_select(pos)
@@ -5156,11 +5157,12 @@ func _handle_input4(event: InputEvent) -> void:
 		if p != null and p["side"] != my_side4 and selected4.x < 0 and not (all_control4 and p["side"] != my_side4):
 			return
 	if selected4.x >= 0:
-		if pos in moves4:
-			_try_move4(selected4, pos, "move")
-			return
+		# 免费移动优先:星星兵落点即使也在普通走法里,也应免费执行
 		if pos in free_retreat4_targets:
 			_try_move4(selected4, pos, "free_retreat")
+			return
+		if pos in moves4:
+			_try_move4(selected4, pos, "move")
 			return
 		if p != null and (p["side"] == side or all_control4):
 			_select4(pos)
@@ -5948,6 +5950,7 @@ func _state_to_data4() -> Dictionary:
 		"alive4": {"0": alive4[0], "1": alive4[1], "2": alive4[2], "3": alive4[3]},
 		"actions_left4": actions_left4,
 		"first_moved4": [first_moved4.x, first_moved4.y],
+		"free_retreat4_used": free_retreat4_used,
 		"skill_cd4": cds,
 		"captured_history4": caps,
 		"revive_count4": {"0": revive_count4[0], "1": revive_count4[1], "2": revive_count4[2], "3": revive_count4[3]},
@@ -6001,6 +6004,7 @@ func _apply_state_data4(data: Dictionary) -> void:
 	alive4 = {0: bool(data["alive4"]["0"]), 1: bool(data["alive4"]["1"]), 2: bool(data["alive4"]["2"]), 3: bool(data["alive4"]["3"])}
 	actions_left4 = int(data["actions_left4"])
 	first_moved4 = Vector2i(int(data["first_moved4"][0]), int(data["first_moved4"][1]))
+	free_retreat4_used = bool(data.get("free_retreat4_used", false))
 	skill_cd4 = {}
 	for s in data["skill_cd4"]:
 		skill_cd4[int(s)] = {}

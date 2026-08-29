@@ -518,6 +518,18 @@ func _run() -> void:
 	scene._perform_free_retreat(Vector2i(0, 6), Vector2i(0, 5))
 	_check(scene.star2_charge[R.Side.RED] == 1, "星星逆位:免费移兵消耗 1 蓄势")
 	_check(scene.actions_left == actions_before, "星星逆位:免费移兵不消耗行动")
+	# 星星正位:点击免费落点优先走免费移动(不消耗行动),而非普通移动
+	scene._setup_board()
+	scene.perks_red = {"xingxing": true}
+	scene.free_retreat_used = false
+	scene.turn = R.Side.RED
+	scene.actions_left = 1
+	scene._select(Vector2i(0, 6))  # 红兵
+	# (0,5) 前进一格同时是普通走法与星星免费落点
+	var act_before2: int = scene.actions_left
+	scene._handle_click(Vector2i(0, 5))
+	_check(scene.actions_left == act_before2, "星星正位:点击免费落点走免费移动(不消耗行动)")
+	_check(scene.free_retreat_used, "星星正位:免费移动标记已用(每回合一次)")
 
 	if _failures == 0:
 		print("== NET SYNC OK ==")
