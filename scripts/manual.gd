@@ -1675,6 +1675,11 @@ func _start_demo() -> void:
 	if current_id.is_empty():
 		return
 	Global.demo_perk = current_id
+	# 必须重置联机/存档残留:否则会走进联机分支或加载旧存档,回到上一局
+	Global.game_mode = "ai"
+	Global.net_role = "local"
+	Global.load_slot = 0
+	Global.from_lobby = false
 	Global.change_scene_with_fade("res://scenes/game.tscn")
 
 
