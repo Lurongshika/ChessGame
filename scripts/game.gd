@@ -94,6 +94,7 @@ var invincible_piece4 := Vector2i(-1, -1)
 var invincible_piece_side4 := -1  # 四人:皇帝无敌棋子所属方(用于"己方移动后清除")
 var counter_side4 := -1
 var siwang_charge4 := {0: 0, 1: 0, 2: 0, 3: 0}
+var star2_charge4 := {0: 0, 1: 0, 2: 0, 3: 0}  # 四人:星星逆位蓄势
 var sync_pieces4: Array = []
 var controlled_turns4 := 0
 var controlled_all_turns4 := 0   # 四人:倒吊人逆位全棋子控制剩余回合数
@@ -107,6 +108,8 @@ var invincible_side4 := -1
 var targeting4 := {}
 var actions_left4 := 1
 var first_moved4 := Vector2i(-1, -1)
+var free_retreat4_targets: Array[Vector2i] = []  # 四人:星星免费移兵落位(蓝色,不消耗行动)
+var free_retreat4_used := false                   # 四人:星星正位每回合一次
 var draft4_side := 0        # 四人 DRAFT:当前选技能方
 var kill_count4 := {0: 0, 1: 0, 2: 0, 3: 0}  # 四人杀棋计数
 var grey_side4 := -1           # 将帅被杀后变灰保留的方(-1=无)
@@ -603,12 +606,14 @@ func _refresh_perk_panels4() -> void:
 				continue
 			var info: Dictionary = perks_data[id]
 			var tip: String = info.get("tip", "")
-			# 充能进度:皇后/死亡用充能值,主动技能显示剩余冷却
+			# 充能进度:皇后/死亡用充能值,星星逆位显示蓄势,主动技能显示剩余冷却
 			var prog := ""
 			if id == "huanghou":
 				prog = "充能 %d/3" % queen_charge4[side]
 			elif id == "siwang":
 				prog = "充能 %d/3" % siwang_charge4[side]
+			elif id == "xingxing2":
+				prog = "蓄势 %d" % star2_charge4.get(side, 0)
 			if _is_active_skill(id) and prog.is_empty():
 				var cd_left4: int = int(skill_cd4.get(side, {}).get(id, 0))
 				if cd_left4 > 0:
@@ -697,6 +702,13 @@ func _activate_skill4(perk_id: String, side: int) -> void:
 			_apply_skill_cd4(perk_id, side)
 			_show_status4("倒吊人:跳过本回合,下回合起控制其他方所有棋子三回合")
 			_consume_turn_after_skill4()
+		"xingxing2":
+			# 星星逆位:获得 2 蓄势(每蓄势可免费移动一个兵),不跳过本回合
+			star2_charge4[side] += 2
+			_apply_skill_cd4(perk_id, side)
+			_show_status4("星星:获得 2 蓄势(可免费移动 2 个兵)")
+			queue_redraw()
+			_update_status4()
 		_:
 			_show_status4("[%s] 该主动技能暂未实现" %  perks_data[perk_id]["name"])
 	# 联机主机:本地释放技能后广播屏幕中央提醒(其他端执行时由各入口补广播)
@@ -1966,6 +1978,13 @@ func _apply_net_skill(perk_id: String, params: Dictionary) -> void:
 			_skill_justice2(side)
 		"siwang2":
 			_skill_death2(side)
+		"xingxing2":
+			# 星星逆位:获得 2 蓄势,不跳过本回合
+			star2_charge[side] += 2
+			_apply_skill_cd("xingxing2", side)
+			status_label.text = "星星:获得 2 蓄势(可免费移动 2 个兵)"
+			queue_redraw()
+			_update_ui()
 		"moshushi", "moshushi2":
 			var a := Vector2i(int(params["a"][0]), int(params["a"][1]))
 			var b := Vector2i(int(params["b"][0]), int(params["b"][1]))
@@ -3722,12 +3741,14 @@ func _add_perk_cards(box: VBoxContainer, side_id: int, is_self: bool) -> void:
 			continue
 		var info: Dictionary = perks_data[id]
 		var tip: String = info.get("tip", "")
-		# 充能进度:皇后/死亡用充能值,主动技能显示剩余冷却
+		# 充能进度:皇后/死亡用充能值,星星逆位显示蓄势,主动技能显示剩余冷却
 		var prog := ""
 		if id == "huanghou":
 			prog = "充能 %d/3" % queen_charge[side_id]
 		elif id == "siwang":
 			prog = "充能 %d/3" % siwang_charge[side_id]
+		elif id == "xingxing2":
+			prog = "蓄势 %d" % star2_charge.get(side_id, 0)
 		if _is_active_skill(id) and prog.is_empty():
 			var cd_left: int = int(skill_cd.get(side_id, {}).get(id, 0))
 			if cd_left > 0:
@@ -3891,11 +3912,12 @@ func _activate_skill(perk_id: String, side: int) -> void:
 			status_label.text = "倒吊人:跳过本回合,下回合起控制所有对方棋子三回合"
 			_consume_turn_after_skill()
 		"xingxing2":
-			# 星星逆位:跳过本回合,获得 2 蓄势(每蓄势可免费移动一个兵)
+			# 星星逆位:获得 2 蓄势(每蓄势可免费移动一个兵),不跳过本回合
 			star2_charge[side] += 2
 			_apply_skill_cd(perk_id, side)
-			status_label.text = "星星:跳过本回合,获得 2 蓄势(可免费移动 2 个兵)"
-			_consume_turn_after_skill()
+			status_label.text = "星星:获得 2 蓄势(可免费移动 2 个兵)"
+			queue_redraw()
+			_update_ui()
 		_:
 			status_label.text = "[%s] 该主动技能暂未实现" % perks_data[perk_id]["name"]
 	# 同步技能执行完:补记棋盘快照(异步 targeting 技能在 _done_targeting 补)
@@ -5057,6 +5079,9 @@ func _draw_overlay4() -> void:
 	# 命运之轮(逆位):协同两子淡蓝色描边
 	for spos4 in sync_pieces4:
 		draw_arc(_pos_px4(spos4), 18.0, 0, TAU, 32, Color(0.45, 0.8, 1.0, 0.95), 2.5)
+	# 星星:兵免费移兵落位(蓝色)
+	for t4 in free_retreat4_targets:
+		draw_circle(_pos_px4(t4), 4.0, Color(0.3, 0.55, 0.95, 0.95))
 	# 隐者:隐身棋子只保留半透明(棋子本体绘制),不画"隐"字与描边,避免暴露隐身位置
 
 
@@ -5090,13 +5115,17 @@ func _handle_input4(event: InputEvent) -> void:
 			return
 	if selected4.x >= 0:
 		if pos in moves4:
-			_try_move4(selected4, pos)
+			_try_move4(selected4, pos, "move")
+			return
+		if pos in free_retreat4_targets:
+			_try_move4(selected4, pos, "free_retreat")
 			return
 		if p != null and (p["side"] == side or all_control4):
 			_select4(pos)
 			return
 		selected4 = Vector2i(-1, -1)
 		moves4 = []
+		free_retreat4_targets = []
 		queue_redraw()
 		return
 	if p != null and (p["side"] == side or all_control4):
@@ -5152,6 +5181,20 @@ func _select4(pos: Vector2i) -> void:
 			if pope_guarded4.has(m):
 				continue
 		moves4.append(m)
+	# 星星:兵免费移动(蓝色,仅空格,任意方向一格)——正位每回合一次,逆位消耗蓄势
+	free_retreat4_targets = []
+	var p_sel = board[pos.y][pos.x]
+	var star_free4: bool = false
+	if p_sel != null and p_sel["type"] == R.Type.PAWN:
+		if perks4[cur4].has("xingxing") and not free_retreat4_used:
+			star_free4 = true
+		elif perks4[cur4].has("xingxing2") and star2_charge4[cur4] > 0:
+			star_free4 = true
+	if star_free4:
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var free_mv4: Vector2i = pos + d
+			if R.in_board(free_mv4, board) and board[free_mv4.y][free_mv4.x] == null:
+				free_retreat4_targets.append(free_mv4)
 	queue_redraw()
 
 
@@ -5196,9 +5239,9 @@ func _is_corner4(pos: Vector2i) -> bool:
 
 
 # 联机四人走子入口:本地直接走;主机校验执行广播;客户端请求
-func _try_move4(from: Vector2i, to: Vector2i) -> void:
+func _try_move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 	if net_role == "local" or not Global.from_lobby:
-		_move4(from, to)
+		_move4(from, to, kind)
 		return
 	if net_role == "host":
 		var side := current_side4()
@@ -5210,6 +5253,24 @@ func _try_move4(from: Vector2i, to: Vector2i) -> void:
 		# 战车(被动·整局):与车相邻的棋子可落至车的可落位;选中车时可落至相邻子(含敌方)的可落位
 		if not in_legal4:
 			in_legal4 = to in _chariot_boost_moves4(from, side)
+		# 星星免费移兵:仅空格一格;正位每回合一次,逆位消耗蓄势
+		if kind == "free_retreat":
+			if p == null or p["type"] != R.Type.PAWN:
+				return
+			var star_ok4b: bool = false
+			if perks4[side].has("xingxing") and not free_retreat4_used:
+				star_ok4b = true
+			elif perks4[side].has("xingxing2") and star2_charge4[side] > 0:
+				star_ok4b = true
+			if not star_ok4b:
+				return
+			if board[to.y][to.x] != null:
+				return
+			var diff4b: Vector2i = to - from
+			if absi(diff4b.x) + absi(diff4b.y) != 1:
+				return
+			on_move4.rpc(from, to, kind)
+			return
 		if not in_legal4:
 			return
 		# 全控制:每子每回合限移一次,不能吃子
@@ -5218,15 +5279,18 @@ func _try_move4(from: Vector2i, to: Vector2i) -> void:
 				return
 			if board[to.y][to.x] != null:
 				return
-		on_move4.rpc(from, to)
+		on_move4.rpc(from, to, kind)
 	else:
-		request_move4.rpc_id(1, from, to)
+		request_move4.rpc_id(1, from, to, kind)
 		selected4 = Vector2i(-1, -1)
 		moves4 = []
+		free_retreat4_targets = []
 
 
-func _move4(from: Vector2i, to: Vector2i) -> void:
+func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 	var mover = board[from.y][from.x]
+	if mover == null:
+		return
 	var side: int = mover["side"]
 	# 隐者:隐身的子不能吃子(可移动到空格)
 	if hidden_pieces4.has(from) and board[to.y][to.x] != null:
@@ -5293,6 +5357,7 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 			_controlled_moved4.append(from)
 	selected4 = Vector2i(-1, -1)
 	moves4 = []
+	free_retreat4_targets = []
 	first_moved4 = to
 	# 任意兵走到棋盘正中心(8,8)变为"后"(升变规则可关闭)
 	if mover["type"] == R.Type.PAWN and to == Vector2i(8, 8) and Global.game_rules.get("promotion", "queen") == "queen":
@@ -5326,9 +5391,17 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 					turn4 += 1
 				_begin_turn4()
 				return
-	# 命运之轮(进阶):协同棋子移动不消耗步数
-	if not from in sync_pieces4:
+	# 命运之轮(进阶):协同棋子移动不消耗步数;星星免费移兵不消耗行动
+	var is_free4: bool = kind == "free_retreat"
+	if not is_free4 and not from in sync_pieces4:
 		actions_left4 -= 1
+	# 星星免费移兵:正位标记每回合一次,逆位消耗 1 蓄势
+	if is_free4:
+		if perks4[side].has("xingxing"):
+			free_retreat4_used = true
+		elif perks4[side].has("xingxing2") and star2_charge4[side] > 0:
+			star2_charge4[side] -= 1
+		free_retreat4_targets = []
 	# "持续一回合"效果在己方移动后清除(隐者隐身/皇后无敌/皇帝无敌)
 	_expire_one_turn_effects4(side)
 	queue_redraw()
@@ -5705,6 +5778,8 @@ func _begin_turn4() -> void:
 		extra_turn4[side] = false
 		actions_left4 += 1
 	first_moved4 = Vector2i(-1, -1)
+	free_retreat4_used = false
+	free_retreat4_targets = []
 	_refresh_perk_panels4()
 	_update_status4()
 	queue_redraw()
@@ -5748,10 +5823,8 @@ func _end_turn4() -> void:
 	turn4 += 1
 	while not alive4[current_side4()]:
 		turn4 += 1
-	if controlled_turns4 > 0:
-		controlled_turns4 -= 1
-		if controlled_turns4 <= 0:
-			controlled_piece4 = {}
+	# 注:倒吊人控制权(正位)不在此递减——与双人一致,在被控子移动后清除(见 _move4);
+	# 逆位全控制回合在 _begin_turn4 按控制方回合递减
 	_begin_turn4()
 
 
@@ -5850,6 +5923,7 @@ func _state_to_data4() -> Dictionary:
 		"emo2_turns4": {"0": emo2_turns4[0], "1": emo2_turns4[1], "2": emo2_turns4[2], "3": emo2_turns4[3]},
 		"emo2_type4": {"0": emo2_type4[0], "1": emo2_type4[1], "2": emo2_type4[2], "3": emo2_type4[3]},
 		"siwang_charge4": {"0": siwang_charge4[0], "1": siwang_charge4[1], "2": siwang_charge4[2], "3": siwang_charge4[3]},
+		"star2_charge4": {"0": star2_charge4[0], "1": star2_charge4[1], "2": star2_charge4[2], "3": star2_charge4[3]},
 		"sync_pieces4": _sync_pieces_to_data4(),
 		"controlled_turns4": controlled_turns4,
 		"pope_guarded4": _pope_to_data4(),
@@ -5925,6 +5999,7 @@ func _apply_state_data4(data: Dictionary) -> void:
 	emo2_turns4 = {0: int(data.get("emo2_turns4", {}).get("0", 0)), 1: int(data.get("emo2_turns4", {}).get("1", 0)), 2: int(data.get("emo2_turns4", {}).get("2", 0)), 3: int(data.get("emo2_turns4", {}).get("3", 0))}
 	emo2_type4 = {0: int(data.get("emo2_type4", {}).get("0", -1)), 1: int(data.get("emo2_type4", {}).get("1", -1)), 2: int(data.get("emo2_type4", {}).get("2", -1)), 3: int(data.get("emo2_type4", {}).get("3", -1))}
 	siwang_charge4 = {0: int(data.get("siwang_charge4", {}).get("0", 0)), 1: int(data.get("siwang_charge4", {}).get("1", 0)), 2: int(data.get("siwang_charge4", {}).get("2", 0)), 3: int(data.get("siwang_charge4", {}).get("3", 0))}
+	star2_charge4 = {0: int(data.get("star2_charge4", {}).get("0", 0)), 1: int(data.get("star2_charge4", {}).get("1", 0)), 2: int(data.get("star2_charge4", {}).get("2", 0)), 3: int(data.get("star2_charge4", {}).get("3", 0))}
 	sync_pieces4 = []
 	for q in data.get("sync_pieces4", []):
 		sync_pieces4.append(Vector2i(int(q[0]), int(q[1])))
@@ -5978,7 +6053,7 @@ func sync_state4(data: Dictionary) -> void:
 
 # 客户端 → 主机:请求走子(四人)
 @rpc("any_peer", "reliable")
-func request_move4(from: Vector2i, to: Vector2i) -> void:
+func request_move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 	if not multiplayer.is_server():
 		return
 	var pid := multiplayer.get_remote_sender_id()
@@ -5996,6 +6071,24 @@ func request_move4(from: Vector2i, to: Vector2i) -> void:
 		in_legal4b = to in _chariot_boost_moves4(from, side)
 	if not in_legal4b:
 		return
+	# 星星免费移兵:仅空格一格,任意方向;正位每回合一次,逆位消耗蓄势
+	if kind == "free_retreat":
+		if p["type"] != R.Type.PAWN:
+			return
+		var star_ok4: bool = false
+		if perks4[side].has("xingxing") and not free_retreat4_used:
+			star_ok4 = true
+		elif perks4[side].has("xingxing2") and star2_charge4[side] > 0:
+			star_ok4 = true
+		if not star_ok4:
+			return
+		if board[to.y][to.x] != null:
+			return
+		var diff4: Vector2i = to - from
+		if absi(diff4.x) + absi(diff4.y) != 1:
+			return
+		on_move4.rpc(from, to, kind)
+		return
 	if hidden_pieces4.has(from) and board[to.y][to.x] != null:
 		return
 	if board[to.y][to.x] != null:
@@ -6004,13 +6097,13 @@ func request_move4(from: Vector2i, to: Vector2i) -> void:
 			return
 		if pope_guarded4.has(to):
 			return
-	on_move4.rpc(from, to)
+	on_move4.rpc(from, to, kind)
 
 
 # 主机 → 所有人:广播走子(四人,含主机本地)
 @rpc("authority", "call_local", "reliable")
-func on_move4(from: Vector2i, to: Vector2i) -> void:
-	_move4(from, to)
+func on_move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
+	_move4(from, to, kind)
 	_broadcast_state4()
 
 

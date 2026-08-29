@@ -116,6 +116,46 @@ func _run() -> void:
 	_check(game.turn4 != turn_before, "四人:技能消耗回合后 turn4 切换")
 	_check(int(game._state_to_data4()["turn4"]) == game.turn4, "四人:广播状态 turn4 与本地一致")
 
+	# --- 四人倒吊人正位:释放后控制权保留(不再被回合切换清空) ---
+	game.net_role = "host"
+	game.four_mode = true
+	game.phase = game.Phase.PLAY
+	game.board = R.make_board4()
+	game.perks4 = {0: {"diaodiao": true}, 1: {}, 2: {}, 3: {}}
+	game.turn4 = 2  # 红方回合
+	game.actions_left4 = 1
+	game.skill_cd4 = {0: {}, 1: {}, 2: {}, 3: {}}
+	game.controlled_piece4 = {}
+	game.controlled_turns4 = 0
+	game._activate_skill4("diaodiao", 0)
+	# 选一个黑方非将棋子
+	var target4 := Vector2i(-1, -1)
+	for rr in 17:
+		for cc in 17:
+			var q = game.board[rr][cc]
+			if q != null and q["side"] == 1 and q["type"] != R.Type.KING:
+				target4 = Vector2i(cc, rr)
+				break
+		if target4.x >= 0:
+			break
+	game._handle_puppet_target4(target4, 0, "diaodiao")
+	_check(not game.controlled_piece4.is_empty(), "四人倒吊人正位:释放后控制权保留")
+	_check(game.controlled_turns4 == 1, "四人倒吊人正位:控制 1 回合")
+
+	# --- 四人星星逆位:使用后不跳回合,获得蓄势,状态同步 ---
+	game.board = R.make_board4()
+	game.perks4 = {0: {"xingxing2": true}, 1: {}, 2: {}, 3: {}}
+	game.turn4 = 2
+	game.actions_left4 = 1
+	game.skill_cd4 = {0: {}, 1: {}, 2: {}, 3: {}}
+	game.star2_charge4 = {0: 0, 1: 0, 2: 0, 3: 0}
+	var t4_before: int = game.turn4
+	game._activate_skill4("xingxing2", 0)
+	_check(game.turn4 == t4_before, "四人星星逆位:使用后不跳回合")
+	_check(game.star2_charge4[0] == 2, "四人星星逆位:获得 2 蓄势")
+	var star_data = game._state_to_data4()
+	_check(int(star_data["star2_charge4"]["0"]) == 2, "四人星星逆位:蓄势随状态广播")
+
 	quit(0 if _fail_count == 0 else 1)
 
 
