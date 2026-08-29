@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://gpotltm611ld"
+
+[deps]
+
+files=["res://perks.name.translation", "res://perks.tip.translation", "res://perks.desc.translation", "res://perks.cat.translation"]
+
+source_file="res://perks.csv"
+dest_files=["res://perks.name.translation", "res://perks.tip.translation", "res://perks.desc.translation", "res://perks.cat.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

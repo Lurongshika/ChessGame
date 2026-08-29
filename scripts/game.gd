@@ -179,6 +179,7 @@ var _four_frames: Array = []  # 四人:四方头像框 {frame, side}
 var _four_mode_label: Label  # 左上角当前模式
 var _progress_labels4 := {}  # 右上角进度: side -> Label
 var _my_turn_breath4 := false  # 自己回合呼吸显示
+var _move_anims: Array = []  # 四人:棋子移动动画 [{piece, from_px, to_px, t, dur}]
 var my_info := {}
 var enemy_info := {}
 
@@ -3277,6 +3278,13 @@ func _process(delta: float) -> void:
 	if four_mode and _my_turn_breath4 and status_label != null and _status4_until <= 0.0:
 		var pulse := 0.55 + 0.45 * sin(_glow_time * 4.0)
 		status_label.modulate.a = pulse
+	# 棋子移动动画推进
+	if not _move_anims.is_empty():
+		for i in range(_move_anims.size() - 1, -1, -1):
+			_move_anims[i]["t"] += delta
+			if _move_anims[i]["t"] >= _move_anims[i]["dur"]:
+				_move_anims.remove_at(i)
+		queue_redraw()
 
 
 func _win(side: int, reason := "") -> void:
@@ -4360,22 +4368,40 @@ func _draw_pieces4() -> void:
 	# 复制双人 _draw_pieces:圆棋子 + 名字 + 4色,棋子落在交点
 	if board.is_empty():
 		return
+	# 动画中棋子的目标位置:绘制时跳过(由动画层绘制插值位置)
+	var anim_targets := {}
+	for a in _move_anims:
+		anim_targets[a["to_px"]] = true
 	for r in board.size():
 		for c in board[r].size():
 			var p = board[r][c]
 			if p == null:
 				continue
 			var center := _pos_px4(Vector2i(c, r))
-			draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(15, 15), Vector2(30, 30)), false, Color(0.3, 0.22, 0.14))
-			draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(14, 14), Vector2(28, 28)), false, Color(0.95, 0.9, 0.78))
-			var sid: int = p["side"]
-			# 将帅被杀后变灰:该方棋子灰色渲染
-			var piece_col: Color = _side_color(sid)
-			if grey_side4 == sid:
-				piece_col = Color(0.55, 0.55, 0.55)
-				draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(14, 14), Vector2(28, 28)), false, Color(0.5, 0.5, 0.5))
-			var name: String = R.PIECE_NAMES[p["type"]] if (sid == 0 or sid == 2) else R.PIECE_NAMES_BLACK[p["type"]]
-			_draw_text(center + Vector2(2, -1), name, 16, piece_col)
+			if anim_targets.has(center):
+				continue  # 动画棋子由动画层绘制
+			_draw_piece4(center, p)
+	# 动画层:棋子从起点平滑移动到终点
+	for a in _move_anims:
+		var prog: float = clampf(a["t"] / a["dur"], 0.0, 1.0)
+		var eased := 1.0 - pow(1.0 - prog, 3.0)  # ease-out 立方
+		var fp: Vector2 = a["from_px"]
+		var tp: Vector2 = a["to_px"]
+		var pos: Vector2 = fp.lerp(tp, eased)
+		_draw_piece4(pos, a["piece"])
+
+
+# 绘制单个棋子(圆 + 名字 + 颜色,可指定中心像素)
+func _draw_piece4(center: Vector2, p: Dictionary) -> void:
+	draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(15, 15), Vector2(30, 30)), false, Color(0.3, 0.22, 0.14))
+	draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(14, 14), Vector2(28, 28)), false, Color(0.95, 0.9, 0.78))
+	var sid: int = p["side"]
+	var piece_col: Color = _side_color(sid)
+	if grey_side4 == sid:
+		piece_col = Color(0.55, 0.55, 0.55)
+		draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(14, 14), Vector2(28, 28)), false, Color(0.5, 0.5, 0.5))
+	var name: String = R.PIECE_NAMES[p["type"]] if (sid == 0 or sid == 2) else R.PIECE_NAMES_BLACK[p["type"]]
+	_draw_text(center + Vector2(2, -1), name, 16, piece_col)
 
 
 func _draw_overlay4() -> void:
@@ -4502,6 +4528,14 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 			return
 	board[to.y][to.x] = mover
 	board[from.y][from.x] = null
+	# 移动动画:记录起点/终点像素
+	_move_anims.append({
+		"piece": mover,
+		"from_px": _pos_px4(from),
+		"to_px": _pos_px4(to),
+		"t": 0.0,
+		"dur": 0.22,
+	})
 	# 隐者:隐身标记跟随移动
 	if hidden_pieces4.has(from):
 		hidden_pieces4[to] = hidden_pieces4[from]
