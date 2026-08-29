@@ -357,6 +357,40 @@ func _run() -> void:
 	scene.turn = R.Side.BLACK
 	_check(scene._validate_move(Vector2i(3, 0), Vector2i(3, 8), "move", R.Side.BLACK) == false, "教皇:受保护棋子不可被吃")
 
+	# --- 教皇 5×5 范围(正位):象自身不无敌,范围内己方棋子无敌,范围外不受保护 ---
+	scene.net_role = "host"
+	scene.phase = scene.Phase.PLAY
+	scene.perks_red = {"jiaohuang": true}
+	scene.perks_black = {}
+	scene._setup_board()
+	# 红象在 (2,9) 与 (6,9);放一个己方红兵在 (3,8)(5×5 内)与一个红兵在 (0,3)(范围外)
+	scene.board[8][3] = R.make_piece(R.Side.RED, R.Type.PAWN)
+	scene.board[3][0] = R.make_piece(R.Side.RED, R.Type.PAWN)
+	scene._refresh_pope_guard(R.Side.RED)
+	# 红象(2,9)自身不获得无敌
+	var eleph_self := Vector2i(2, 9)
+	_check(not scene.pope_guarded.has(eleph_self), "教皇正位:象自身不获得无敌")
+	_check(scene.pope_guarded.has(Vector2i(3, 8)), "教皇正位:5×5范围内己方棋子获得无敌")
+	_check(not scene.pope_guarded.has(Vector2i(0, 3)), "教皇正位:范围外己方棋子不获得无敌")
+	# 范围内敌方棋子不会因正位获得无敌
+	scene.board[7][3] = R.make_piece(R.Side.BLACK, R.Type.PAWN)  # (3,7):红象(2,9)的5×5内
+	scene._refresh_pope_guard(R.Side.RED)
+	_check(not scene.pope_guarded.has(Vector2i(3, 7)), "教皇正位:范围内敌方棋子不获得无敌")
+
+	# --- 教皇逆位 5×5 范围:象自身+范围内所有子(含敌方)都获得反制 ---
+	scene.perks_red = {"jiaohuang2": true}
+	scene._refresh_pope_guard(R.Side.RED)
+	_check(scene.pope_countered.has(eleph_self), "教皇逆位:象自身获得反制")
+	_check(scene.pope_countered.has(Vector2i(3, 8)), "教皇逆位:范围内己方棋子获得反制")
+	_check(scene.pope_countered.has(Vector2i(3, 7)), "教皇逆位:范围内敌方棋子获得反制")
+	_check(not scene.pope_countered.has(Vector2i(0, 3)), "教皇逆位:范围外棋子不获得反制")
+	# 吃范围内反制子触发同归于尽
+	scene.turn = R.Side.BLACK
+	_check(scene.board[8][3] != null, "教皇逆位:确认 (3,8) 有即将被吃的红兵")
+	# 记录 _handle_capture 后该格与攻击者同归于尽
+	scene._handle_capture(scene.board[8][3], Vector2i(3, 8), R.Side.BLACK)
+	_check(scene.board[8][3] == null, "教皇逆位:被吃反制子与攻击者同归于尽(该格清空)")
+
 	# --- 对局记录同步:敌我双方技能都随状态广播 ---
 	scene.net_role = "host"
 	scene.phase = scene.Phase.PLAY

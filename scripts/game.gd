@@ -68,7 +68,8 @@ var controlled_turns := 0       # 倒吊人:控制权剩余回合数
 var controlled_all_turns := 0   # 倒吊人逆位:全棋子控制剩余回合数(释放后跳过本回合,下回合起生效)
 var controlled_all_owner := -1  # 倒吊人逆位:全棋子控制权归属方
 var _controlled_moved: Array[Vector2i] = []  # 倒吊人逆位:本回合已移动的对方棋子
-var pope_guarded := {}          # 教皇:象路径上阻挡的己方棋子位置(获得无敌) -> {pos: true}
+var pope_guarded := {}          # 教皇:象 5×5 范围内己方棋子(获得无敌) -> {pos: true}
+var pope_countered := {}        # 教皇逆位:象 5×5 范围内的子(获得反制) -> {pos: true}
 var undo_snapshot := {}         # 图鉴演示:悔棋前完整状态快照(供撤销悔棋)
 var extra_turn := {0: false, 1: false}  # 节制:下回合追加行动
 var suicide_mark := {}              # 皇帝:{pos: side} 被吃时同归于尽
@@ -106,6 +107,7 @@ var controlled_all_turns4 := 0   # 四人:倒吊人逆位全棋子控制剩余�
 var controlled_all_owner4 := -1  # 四人:全棋子控制权归属方
 var _controlled_moved4: Array[Vector2i] = []  # 四人:本回合已移动的对方棋子
 var pope_guarded4 := {}
+var pope_countered4 := {}       # 四人:教皇逆位象 5×5 范围内的子(获得反制)
 var extra_turn4 := {0: false, 1: false, 2: false, 3: false}
 var suicide_mark4 := {}
 var hidden_pieces4 := {}
@@ -2179,6 +2181,7 @@ func _state_to_data() -> Dictionary:
 		"controlled_all_turns": controlled_all_turns,
 		"controlled_all_owner": controlled_all_owner,
 		"pope_guarded": _pope_to_data(),
+		"pope_countered": _pope2_to_data(),
 		"move_history": _moves_to_json(),
 	}
 
@@ -2193,6 +2196,13 @@ func _sync_pieces_to_data() -> Array:
 func _pope_to_data() -> Array:
 	var arr: Array = []
 	for pos in pope_guarded:
+		arr.append([pos.x, pos.y])
+	return arr
+
+
+func _pope2_to_data() -> Array:
+	var arr: Array = []
+	for pos in pope_countered:
 		arr.append([pos.x, pos.y])
 	return arr
 
@@ -2267,6 +2277,9 @@ func _apply_state_data(data: Dictionary) -> void:
 	pope_guarded = {}
 	for pg in data.get("pope_guarded", []):
 		pope_guarded[Vector2i(int(pg[0]), int(pg[1]))] = true
+	pope_countered = {}
+	for pc in data.get("pope_countered", []):
+		pope_countered[Vector2i(int(pc[0]), int(pc[1]))] = true
 	selected = Vector2i(-1, -1)
 	moves_cache = []
 	free_retreat_targets = []
@@ -3297,10 +3310,13 @@ func _clear_all_hidden() -> void:
 	queue_redraw()
 
 
-# 教皇:象的走法路径(象眼)上阻挡的己方棋子获得无敌
+# 教皇:以象为中心的 5×5 范围内棋子获得无敌/反制(正位除象自身,逆位含象自身)
 func _refresh_pope_guard(side: int) -> void:
 	pope_guarded.clear()
-	if not perks_of(side).has("jiaohuang"):
+	pope_countered.clear()
+	var has_pope: bool = perks_of(side).has("jiaohuang")
+	var has_pope2: bool = perks_of(side).has("jiaohuang2")
+	if not has_pope and not has_pope2:
 		return
 	for r in R.ROWS:
 		for c in R.COLS:
@@ -3308,13 +3324,24 @@ func _refresh_pope_guard(side: int) -> void:
 			if p == null or p["side"] != side or p["type"] != R.Type.ELEPHANT:
 				continue
 			var pos := Vector2i(c, r)
-			for d in [Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]:
-				var eye: Vector2i = pos + d
-				if not R.in_board(eye):
-					continue
-				var ep = board[eye.y][eye.x]
-				if ep != null and ep["side"] == side:
-					pope_guarded[eye] = true
+			# 以象为中心的 5×5 范围
+			for dr in range(-2, 3):
+				for dc in range(-2, 3):
+					var gpos: Vector2i = pos + Vector2i(dc, dr)
+					if not R.in_board(gpos):
+						continue
+					var gp = board[gpos.y][gpos.x]
+					if gpos == pos:
+						# 象自身:正位不获得无敌;逆位获得反制
+						if has_pope2:
+							pope_countered[gpos] = true
+						continue
+					if gp == null:
+						continue
+					if has_pope and gp["side"] == side:
+						pope_guarded[gpos] = true  # 正位:范围内己方棋子无敌
+					if has_pope2:
+						pope_countered[gpos] = true  # 逆位:范围内任意子反制(含敌方)
 
 
 # 审判:每回合随机禁用敌方一个主动技能
@@ -3487,7 +3514,7 @@ func _handle_capture(captured: Dictionary, captured_pos: Vector2i, attacker_side
 	elif victim_side == counter_side:
 		counter_triggered = true
 		status_label.text = "皇后:反制,同归于尽!"
-	elif captured["type"] == R.Type.ELEPHANT and perks_of(victim_side).has("jiaohuang2"):
+	elif pope_countered.has(captured_pos):
 		counter_triggered = true
 		status_label.text = "教皇:反制,同归于尽!"
 	if counter_triggered:
@@ -5213,7 +5240,7 @@ func _draw_overlay(db: Array) -> void:
 	if not suicide_mark.is_empty():
 		var sp: Vector2i = suicide_mark["pos"]
 		draw_arc(_pos_px(sp), 25.0 + br * 2.0, 0, TAU, 32, Color(0.6, 0.25, 0.85, br_alpha), 3.0)
-	# 教皇:象路径阻挡的己方棋子获得无敌(金色描边,呼吸)
+	# 教皇:以象为中心5×5范围内除象以外的己方棋子获得无敌(金色描边,呼吸)
 	for gpos in pope_guarded:
 		draw_arc(_pos_px(gpos), 27.0 + br * 2.0, 0, TAU, 40, Color(0.95, 0.8, 0.2, br_alpha), 3.0)
 	# 无敌状态:皇后全员无敌 / 皇帝指定无敌 → 金色描边(呼吸)
@@ -5226,7 +5253,7 @@ func _draw_overlay(db: Array) -> void:
 				var qpos := Vector2i(c, r)
 				if invincible_side == q["side"] or qpos == invincible_piece:
 					draw_arc(_pos_px(qpos), 27.0 + br * 2.0, 0, TAU, 40, Color(0.95, 0.8, 0.2, br_alpha), 3.0)
-	# 反制状态:皇后全员反制 / 教皇逆位象反制 → 紫色描边(呼吸)
+	# 反制状态:皇后全员反制 / 教皇逆位象为中心5×5内的子反制 → 紫色描边(呼吸)
 	var purple := Color(0.6, 0.25, 0.85, br_alpha)
 	if counter_side >= 0:
 		for r in db.size():
@@ -5236,13 +5263,8 @@ func _draw_overlay(db: Array) -> void:
 					continue
 				if q["side"] == counter_side:
 					draw_arc(_pos_px(Vector2i(c, r)), 27.0 + br * 2.0, 0, TAU, 40, purple, 3.0)
-	for s4 in 2:
-		if perks_of(s4).has("jiaohuang2"):
-			for r in db.size():
-				for c in db[r].size():
-					var q = db[r][c]
-					if q != null and q["side"] == s4 and q["type"] == R.Type.ELEPHANT:
-						draw_arc(_pos_px(Vector2i(c, r)), 27.0 + br * 2.0, 0, TAU, 40, purple, 3.0)
+	for cpos in pope_countered:
+		draw_arc(_pos_px(cpos), 27.0 + br * 2.0, 0, TAU, 40, purple, 3.0)
 	# 命运之轮(逆位):协同两子淡蓝色描边(呼吸)
 	for spos in sync_pieces:
 		draw_arc(_pos_px(spos), 29.0 + br * 2.0, 0, TAU, 40, Color(0.45, 0.8, 1.0, br_alpha), 3.0)
@@ -5462,7 +5484,7 @@ func _draw_overlay4() -> void:
 	if not suicide_mark4.is_empty():
 		var sp4: Vector2i = suicide_mark4["pos"]
 		draw_arc(_pos_px4(sp4), 16.0 + br4 * 1.5, 0, TAU, 24, Color(0.6, 0.25, 0.85, br4_alpha), 2.5)
-	# 教皇:象路径阻挡的己方棋子获得无敌(金色描边,呼吸)
+	# 教皇:以象为中心5×5范围内除象以外的己方棋子获得无敌(金色描边,呼吸)
 	for gpos in pope_guarded4:
 		draw_arc(_pos_px4(gpos), 17.0 + br4 * 1.5, 0, TAU, 32, Color(0.95, 0.8, 0.2, br4_alpha), 2.5)
 	# 无敌状态:皇后全员无敌 / 皇帝指定无敌 → 金色描边(呼吸)
@@ -5475,7 +5497,7 @@ func _draw_overlay4() -> void:
 				var qpos := Vector2i(c, r)
 				if invincible_side4 == q["side"] or qpos == invincible_piece4:
 					draw_arc(_pos_px4(qpos), 17.0 + br4 * 1.5, 0, TAU, 32, Color(0.95, 0.8, 0.2, br4_alpha), 2.5)
-	# 反制状态:皇后全员反制 / 教皇逆位象反制 → 紫色描边(呼吸)
+	# 反制状态:皇后全员反制 / 教皇逆位象为中心5×5内的子反制 → 紫色描边(呼吸)
 	var purple4 := Color(0.6, 0.25, 0.85, br4_alpha)
 	if counter_side4 >= 0:
 		for r in board.size():
@@ -5485,13 +5507,8 @@ func _draw_overlay4() -> void:
 					continue
 				if q["side"] == counter_side4:
 					draw_arc(_pos_px4(Vector2i(c, r)), 17.0 + br4 * 1.5, 0, TAU, 32, purple4, 2.5)
-	for s5 in 4:
-		if perks4[s5].has("jiaohuang2"):
-			for r in board.size():
-				for c in board[r].size():
-					var q = board[r][c]
-					if q != null and q["side"] == s5 and q["type"] == R.Type.ELEPHANT:
-						draw_arc(_pos_px4(Vector2i(c, r)), 17.0 + br4 * 1.5, 0, TAU, 32, purple4, 2.5)
+	for cpos in pope_countered4:
+		draw_arc(_pos_px4(cpos), 17.0 + br4 * 1.5, 0, TAU, 32, purple4, 2.5)
 	# 命运之轮(逆位):协同两子淡蓝色描边(呼吸)
 	for spos4 in sync_pieces4:
 		draw_arc(_pos_px4(spos4), 18.0 + br4 * 1.5, 0, TAU, 32, Color(0.45, 0.8, 1.0, br4_alpha), 2.5)
@@ -6042,7 +6059,7 @@ func _handle_capture4(captured: Dictionary, captured_pos: Vector2i, attacker_sid
 	elif victim_side == counter_side4:
 		counter_triggered = true
 		_show_status4("皇后:反制,同归于尽!")
-	elif captured["type"] == R.Type.ELEPHANT and perks4[victim_side].has("jiaohuang2"):
+	elif pope_countered4.has(captured_pos):
 		counter_triggered = true
 		_show_status4("教皇:反制,同归于尽!")
 	if counter_triggered:
@@ -6336,7 +6353,10 @@ func _refresh_judgement4(side: int) -> void:
 
 func _refresh_pope_guard4(side: int) -> void:
 	pope_guarded4.clear()
-	if not perks4[side].has("jiaohuang"):
+	pope_countered4.clear()
+	var has_pope4: bool = perks4[side].has("jiaohuang")
+	var has_pope24: bool = perks4[side].has("jiaohuang2")
+	if not has_pope4 and not has_pope24:
 		return
 	for r in board.size():
 		for c in board[r].size():
@@ -6344,13 +6364,24 @@ func _refresh_pope_guard4(side: int) -> void:
 			if p == null or p["side"] != side or p["type"] != R.Type.ELEPHANT:
 				continue
 			var pos := Vector2i(c, r)
-			for d in [Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]:
-				var eye: Vector2i = pos + d
-				if not R.in_board(eye, board):
-					continue
-				var ep = board[eye.y][eye.x]
-				if ep != null and ep["side"] == side:
-					pope_guarded4[eye] = true
+			# 以象为中心的 5×5 范围
+			for dr in range(-2, 3):
+				for dc in range(-2, 3):
+					var gpos: Vector2i = pos + Vector2i(dc, dr)
+					if not R.in_board(gpos, board):
+						continue
+					var gp = board[gpos.y][gpos.x]
+					if gpos == pos:
+						# 象自身:正位不获得无敌;逆位获得反制
+						if has_pope24:
+							pope_countered4[gpos] = true
+						continue
+					if gp == null:
+						continue
+					if has_pope4 and gp["side"] == side:
+						pope_guarded4[gpos] = true  # 正位:范围内己方棋子无敌
+					if has_pope24:
+						pope_countered4[gpos] = true  # 逆位:范围内任意子反制(含敌方)
 
 
 # ==================== 联机四人:主机权威状态同步(复制双人逻辑,4 方版) ====================
@@ -6409,6 +6440,7 @@ func _state_to_data4() -> Dictionary:
 		"sync_pieces4": _sync_pieces_to_data4(),
 		"controlled_turns4": controlled_turns4,
 		"pope_guarded4": _pope_to_data4(),
+		"pope_countered4": _pope2_to_data4(),
 		"perks4": perks_all,
 		"record4_history": _record4_history,
 	}
@@ -6424,6 +6456,13 @@ func _sync_pieces_to_data4() -> Array:
 func _pope_to_data4() -> Array:
 	var arr: Array = []
 	for pos in pope_guarded4:
+		arr.append([pos.x, pos.y])
+	return arr
+
+
+func _pope2_to_data4() -> Array:
+	var arr: Array = []
+	for pos in pope_countered4:
 		arr.append([pos.x, pos.y])
 	return arr
 
@@ -6492,6 +6531,9 @@ func _apply_state_data4(data: Dictionary) -> void:
 	pope_guarded4 = {}
 	for pg in data.get("pope_guarded4", []):
 		pope_guarded4[Vector2i(int(pg[0]), int(pg[1]))] = true
+	pope_countered4 = {}
+	for pc in data.get("pope_countered4", []):
+		pope_countered4[Vector2i(int(pc[0]), int(pc[1]))] = true
 	if data.has("perks4"):
 		perks4 = {}
 		for side_str in data["perks4"]:
