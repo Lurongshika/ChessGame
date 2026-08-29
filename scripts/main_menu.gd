@@ -231,14 +231,14 @@ func _show_settings() -> void:
 		ab_val.text = "%.4f" % ab
 	)
 
-	# 画面曲率(0-100 → curve_val 20.0-1.0,越小越弯)
+	# 画面曲率(0-85 → curve_val 20.0-3.85,越小越弯,上限 85%)
 	var cv_label := _label("画面曲率", 17, Color(0.85, 0.82, 0.75))
 	cv_label.position = Vector2(350, 420)
 	cv_label.size = Vector2(180, 34)
 	opt_root.add_child(cv_label)
 	var cv_slider := HSlider.new()
 	cv_slider.min_value = 0
-	cv_slider.max_value = 100
+	cv_slider.max_value = 85
 	cv_slider.step = 1
 	cv_slider.value = (20.0 - Global.crt_curve) / (20.0 - 1.0) * 100.0
 	cv_slider.position = Vector2(550, 422)
