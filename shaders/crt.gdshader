@@ -41,8 +41,10 @@ vec3 crt_color(vec2 crt_uv) {
 
 	vec3 col = mix(base, blur, 0.3);
 
-	// 扫描线(横向明暗条纹,随时间缓慢滚动)
-	float scan = sin(crt_uv.y * 800.0 + TIME * 5.0) * scan_intensity;
+	// 扫描线(更细更密集:频率提高 + 尖锐波形)
+	float scan_wave = sin(crt_uv.y * 2400.0 + TIME * 5.0);
+	scan_wave = pow(scan_wave, 8.0);  // 尖锐化,仅峰值附近形成细线
+	float scan = scan_wave * scan_intensity * 2.2;
 	col -= scan;
 
 	// 暗角(几乎取消:只在最角落轻微,最低 0.95)
