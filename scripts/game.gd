@@ -674,8 +674,11 @@ func _on_perk_clicked4(perk_id: String, side: int) -> void:
 # 四人主动技能执行:复制双人 _activate_skill 的分支
 func _activate_skill4(perk_id: String, side: int) -> void:
 	_record_skill4(side, perk_id)
-	# 全局释放提醒(屏幕中央)
-	_show_skill_announce(perk_id, side)
+	# 目标型技能:进入选目标阶段,不立即提醒(选完目标执行时才提醒,见各 _handle_*_target4)
+	var is_targeting_now4: bool = _is_targeting_skill(perk_id)
+	if not is_targeting_now4:
+		# 全局释放提醒(屏幕中央)
+		_show_skill_announce(perk_id, side)
 	match perk_id:
 		"nvjisi", "nvjisi2":
 			_skill_priestess4(perk_id, side)
@@ -712,7 +715,8 @@ func _activate_skill4(perk_id: String, side: int) -> void:
 		_:
 			_show_status4("[%s] 该主动技能暂未实现" %  perks_data[perk_id]["name"])
 	# 联机主机:本地释放技能后广播屏幕中央提醒(其他端执行时由各入口补广播)
-	if net_role == "host" and Global.from_lobby:
+	# 目标型技能不在此广播:选完目标执行时才广播(见各 _handle_*_target4),避免提前/重复提醒
+	if net_role == "host" and Global.from_lobby and not _is_targeting_skill(perk_id):
 		notify_skill_used4.rpc(perk_id, side)
 
 
@@ -852,6 +856,7 @@ func _handle_swap_target4(pos: Vector2i, side: int, perk_id: String) -> void:
 	_done_targeting4()
 	_apply_skill_cd4(perk_id, side)
 	_show_status4("魔术师:两子位置已交换")
+	_show_skill_announce(perk_id, side)
 	queue_redraw()
 	_consume_turn_after_skill4()
 
@@ -870,6 +875,7 @@ func _handle_king_guard4(pos: Vector2i, side: int) -> void:
 	_apply_skill_cd4("huangdi", side)
 	_done_targeting4()
 	_show_status4("皇帝:该子本回合无敌")
+	_show_skill_announce("huangdi", side)
 	queue_redraw()
 	_consume_turn_after_skill4()
 
@@ -887,6 +893,7 @@ func _handle_king_counter4(pos: Vector2i, side: int) -> void:
 	_apply_skill_cd4("huangdi2", side)
 	_done_targeting4()
 	_show_status4("皇帝:标记棋子,被吃时同归于尽")
+	_show_skill_announce("huangdi2", side)
 	queue_redraw()
 	_consume_turn_after_skill4()
 
@@ -906,6 +913,7 @@ func _handle_death_target4(pos: Vector2i, side: int) -> void:
 	siwang_charge4[side] -= 1
 	_destroy_same_type4(pos, side)
 	_done_targeting4()
+	_show_skill_announce("siwang", side)
 	_consume_turn_after_skill4()
 
 
@@ -949,6 +957,7 @@ func _handle_puppet_target4(pos: Vector2i, side: int, perk_id: String) -> void:
 		_show_status4("倒吊人:获得对方棋子控制权三回合(不能吃子)")
 	else:
 		_show_status4("倒吊人:已获得对方棋子控制权")
+	_show_skill_announce(perk_id, side)
 	queue_redraw()
 	_consume_turn_after_skill4()
 
@@ -1004,6 +1013,7 @@ func _handle_chariot_target4(pos: Vector2i, side: int, perk_id: String) -> void:
 			_show_status4("战车:棋子已移至车可落位")
 		_done_targeting4()
 		_apply_skill_cd4(perk_id, side)
+		_show_skill_announce(perk_id, side)
 		queue_redraw()
 		_consume_turn_after_skill4()
 
@@ -3888,8 +3898,11 @@ func _show_skill_announce(perk_id: String, side: int) -> void:
 
 func _activate_skill(perk_id: String, side: int) -> void:
 	_record_skill(side, perk_id)
-	# 全局释放提醒(屏幕中央)
-	_show_skill_announce(perk_id, side)
+	# 目标型技能:进入选目标阶段,不立即提醒(选完目标执行时才提醒,见各 _handle_*_target)
+	var is_targeting_now: bool = _is_targeting_skill(perk_id)
+	if not is_targeting_now:
+		# 全局释放提醒(屏幕中央)
+		_show_skill_announce(perk_id, side)
 	match perk_id:
 		"nvjisi", "nvjisi2":
 			_skill_priestess(perk_id, side)
@@ -3928,7 +3941,8 @@ func _activate_skill(perk_id: String, side: int) -> void:
 	# 同步技能执行完:补记棋盘快照(异步 targeting 技能在 _done_targeting 补)
 	_snapshot_last_board()
 	# 联机主机:本地释放技能后广播屏幕中央提醒(客户端执行时 _apply_net_skill 里已广播)
-	if net_role == "host" and Global.from_lobby:
+	# 目标型技能不在此广播:选完目标执行时才广播(见各 _handle_*_target),避免提前/重复提醒
+	if net_role == "host" and Global.from_lobby and not _is_targeting_skill(perk_id):
 		notify_skill_used.rpc(perk_id, side)
 
 
@@ -4240,8 +4254,10 @@ func _handle_swap_target(pos: Vector2i, side: int, perk_id: String) -> void:
 	_done_targeting()
 	_apply_skill_cd(perk_id, side)
 	status_label.text = "魔术师:两子位置已交换"
+	_show_skill_announce(perk_id, side)
 	_refresh_move_log()
 	if net_role == "host":
+		notify_skill_used.rpc(perk_id, side)
 		_consume_turn_after_skill()
 		_broadcast_state()
 
@@ -4262,8 +4278,10 @@ func _handle_king_guard(pos: Vector2i, side: int) -> void:
 	_apply_skill_cd("huangdi", side)
 	_done_targeting()
 	status_label.text = "皇帝:该子本回合无敌"
+	_show_skill_announce("huangdi", side)
 	queue_redraw()
 	if net_role == "host":
+		notify_skill_used.rpc("huangdi", side)
 		_consume_turn_after_skill()
 		_broadcast_state()
 
@@ -4283,8 +4301,10 @@ func _handle_king_counter(pos: Vector2i, side: int) -> void:
 	_apply_skill_cd("huangdi2", side)
 	_done_targeting()
 	status_label.text = "皇帝:标记棋子,被吃时同归于尽"
+	_show_skill_announce("huangdi2", side)
 	queue_redraw()
 	if net_role == "host":
+		notify_skill_used.rpc("huangdi2", side)
 		_consume_turn_after_skill()
 		_broadcast_state()
 
@@ -4306,7 +4326,9 @@ func _handle_death_target(pos: Vector2i, side: int) -> void:
 	siwang_charge[side] -= 1
 	_destroy_same_type(pos, side)
 	_done_targeting()
+	_show_skill_announce("siwang", side)
 	if net_role == "host":
+		notify_skill_used.rpc("siwang", side)
 		_consume_turn_after_skill()
 		_broadcast_state()
 
@@ -4330,8 +4352,10 @@ func _handle_puppet_target(pos: Vector2i, side: int, perk_id: String) -> void:
 		status_label.text = "倒吊人:获得对方棋子控制权三回合(不能吃子)"
 	else:
 		status_label.text = "倒吊人:已获得对方棋子控制权"
+	_show_skill_announce(perk_id, side)
 	queue_redraw()
 	if net_role == "host":
+		notify_skill_used.rpc(perk_id, side)
 		_consume_turn_after_skill()
 		_broadcast_state()
 
@@ -4391,8 +4415,10 @@ func _handle_chariot_target(pos: Vector2i, side: int, perk_id: String) -> void:
 			status_label.text = "战车:棋子已移至车可落位"
 		_done_targeting()
 		_apply_skill_cd(perk_id, side)
+		_show_skill_announce(perk_id, side)
 		_refresh_move_log()
 		if net_role == "host":
+			notify_skill_used.rpc(perk_id, side)
 			_consume_turn_after_skill()
 			_broadcast_state()
 
