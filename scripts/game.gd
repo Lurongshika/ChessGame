@@ -180,6 +180,9 @@ var _four_mode_label: Label  # 左上角当前模式
 var _progress_labels4 := {}  # 右上角进度: side -> Label
 var _my_turn_breath4 := false  # 自己回合呼吸显示
 var _move_anims: Array = []  # 四人:棋子移动动画 [{piece, from_px, to_px, t, dur}]
+var _debris: Array = []     # 吃子破碎粒子 [{pos, vel, life, max, size, color}]
+var _shake_time := 0.0      # 屏幕震动剩余时间
+var _shake_strength := 0.0  # 屏幕震动强度
 var my_info := {}
 var enemy_info := {}
 
@@ -3285,6 +3288,26 @@ func _process(delta: float) -> void:
 			if _move_anims[i]["t"] >= _move_anims[i]["dur"]:
 				_move_anims.remove_at(i)
 		queue_redraw()
+	# 吃子粒子推进
+	if not _debris.is_empty():
+		var grav := 260.0
+		for i in range(_debris.size() - 1, -1, -1):
+			var d = _debris[i]
+			d["vel"].y += grav * delta
+			d["pos"] += d["vel"] * delta
+			d["life"] -= delta
+			if d["life"] <= 0.0:
+				_debris.remove_at(i)
+		queue_redraw()
+	# 屏幕震动衰减
+	if _shake_time > 0.0:
+		_shake_time -= delta
+		var prog: float = clampf(_shake_time / 0.3, 0.0, 1.0)
+		var rng := RandomNumberGenerator.new()
+		rng.randomize()
+		position = Vector2(rng.randf_range(-1, 1), rng.randf_range(-1, 1)) * _shake_strength * prog
+	else:
+		position = Vector2.ZERO
 
 
 func _win(side: int, reason := "") -> void:
@@ -4139,6 +4162,7 @@ func _draw() -> void:
 		_draw_board4()
 		_draw_pieces4()
 		_draw_overlay4()
+		_draw_particles4()
 		return
 	_draw_board()
 	_draw_pieces(_display_board())
@@ -4391,6 +4415,38 @@ func _draw_pieces4() -> void:
 		_draw_piece4(pos, a["piece"])
 
 
+# 吃子特效:屏幕震动 + 被吃子粒子破碎消散
+func _trigger_capture_effect4(captured: Dictionary, to: Vector2i) -> void:
+	_shake_time = 0.3
+	_shake_strength = 9.0
+	# 被吃子位置生成碎片(颜色 = 被吃方颜色)
+	var center: Vector2 = _pos_px4(to)
+	var col: Color = _side_color(captured["side"])
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	for i in 14:
+		var ang := rng.randf() * TAU
+		var spd := rng.randf_range(40.0, 140.0)
+		_debris.append({
+			"pos": center,
+			"vel": Vector2(cos(ang), sin(ang)) * spd,
+			"life": rng.randf_range(0.35, 0.6),
+			"max": 0.6,
+			"size": rng.randf_range(3.0, 6.0),
+			"color": col,
+		})
+	queue_redraw()
+
+
+# 绘制破碎粒子(小方块,生命衰减透明度)
+func _draw_debris() -> void:
+	for d in _debris:
+		var alpha: float = clampf(d["life"] / d["max"], 0.0, 1.0)
+		var col: Color = d["color"]
+		var sz: float = d["size"]
+		draw_rect(Rect2(d["pos"] - Vector2(sz / 2, sz / 2), Vector2(sz, sz)), Color(col.r, col.g, col.b, alpha))
+
+
 # 绘制单个棋子(圆 + 名字 + 颜色,可指定中心像素)
 func _draw_piece4(center: Vector2, p: Dictionary) -> void:
 	draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(15, 15), Vector2(30, 30)), false, Color(0.3, 0.22, 0.14))
@@ -4402,6 +4458,10 @@ func _draw_piece4(center: Vector2, p: Dictionary) -> void:
 		draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(14, 14), Vector2(28, 28)), false, Color(0.5, 0.5, 0.5))
 	var name: String = R.PIECE_NAMES[p["type"]] if (sid == 0 or sid == 2) else R.PIECE_NAMES_BLACK[p["type"]]
 	_draw_text(center + Vector2(2, -1), name, 16, piece_col)
+
+
+func _draw_particles4() -> void:
+	_draw_debris()
 
 
 func _draw_overlay4() -> void:
@@ -4561,6 +4621,8 @@ func _move4(from: Vector2i, to: Vector2i) -> void:
 	_record4_history.append({"text": "%s %s %d%d→%d%d" % [_side_short4(side), piece_name, from.x, from.y, to.x, to.y], "turn": turn4})
 	_refresh_record4()
 	if captured != null:
+		# 吃子特效:屏幕震动 + 被吃子粒子破碎
+		_trigger_capture_effect4(captured, to)
 		hidden_pieces4.erase(to)
 		if perks4[captured["side"]].has("emo"):
 			last_eat4 = {"side": side, "type": mover["type"]}
