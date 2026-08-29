@@ -42,6 +42,8 @@ func _ready() -> void:
 	_fade_rect = ColorRect.new()
 	_fade_rect.color = Color(0, 0, 0, 1)
 	_fade_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# 不拦截鼠标:透明时按钮可正常点击
+	_fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fade_layer.add_child(_fade_rect)
 	set_process(true)
 	# 开局淡入(从黑到透明)
