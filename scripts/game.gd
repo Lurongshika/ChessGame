@@ -2938,12 +2938,23 @@ func _expire_one_turn_effects(side: int) -> void:
 
 func _perform_move(from: Vector2i, to: Vector2i) -> void:
 	_record_move(from, to, "move")
+	# 移动前先取棋子引用(动画用,避免后续棋盘变化影响)
+	var _moving_piece: Dictionary = board[from.y][from.x]
 	var res := R.apply_move(board, from, to)
 	board = res["board"]
 	var captured = res["captured"]
 	selected = Vector2i(-1, -1)
 	moves_cache = []
 	free_retreat_targets = []
+	# 移动动画:记录起点/终点像素(与四人一致)
+	_move_anims.append({
+		"piece": _moving_piece,
+		"from_px": _pos_px(from),
+		"to_px": _pos_px(to),
+		"t": 0.0,
+		"dur": 0.22,
+	})
+	Global.play_sfx("move_chess", -6.0)
 	# 隐者:隐身标记跟随棋子移动(己方移动被标记的隐身棋子时)
 	# 逆位持久隐身(side+100):移动后立刻破隐
 	if hidden_pieces.has(from):
@@ -2967,6 +2978,25 @@ func _perform_move(from: Vector2i, to: Vector2i) -> void:
 			_controlled_moved.append(from)
 	if captured != null:
 		hidden_pieces.erase(to)  # 吃掉目标位置的隐身子时,清除其隐身标记
+		# 吃子特效:屏幕震动 + 被吃子粒子破碎 + 音效(与四人一致)
+		Global.play_sfx("kill", -4.0)
+		_shake_time = 0.3
+		_shake_strength = 9.0
+		var cap_center: Vector2 = _pos_px(to)
+		var cap_col: Color = _side_color(captured["side"])
+		var crng := RandomNumberGenerator.new()
+		crng.randomize()
+		for i in 14:
+			var cang := crng.randf() * TAU
+			var cspd := crng.randf_range(40.0, 140.0)
+			_debris.append({
+				"pos": cap_center,
+				"vel": Vector2(cos(cang), sin(cang)) * cspd,
+				"life": crng.randf_range(0.35, 0.6),
+				"max": 0.6,
+				"size": crng.randf_range(3.0, 6.0),
+				"color": cap_col,
+			})
 		# 恶魔:记录"谁用什么类型吃了"(被吃方有恶魔时,同类型不能连续吃)
 		if perks_of(captured["side"]).has("emo") or perks_of(captured["side"]).has("emo2"):
 			var atk = board[to.y][to.x]
@@ -4512,6 +4542,7 @@ func _draw() -> void:
 	_draw_board()
 	_draw_pieces(_display_board())
 	_draw_overlay(_display_board())
+	_draw_debris()
 
 
 func _display_board() -> Array:
@@ -4546,6 +4577,10 @@ func _draw_board() -> void:
 func _draw_pieces(db: Array) -> void:
 	if db.is_empty():
 		return
+	# 动画中棋子的目标位置:绘制时跳过(由动画层绘制插值位置,与四人一致)
+	var anim_targets := {}
+	for a in _move_anims:
+		anim_targets[a["to_px"]] = true
 	for r in db.size():
 		for c in db[r].size():
 			var p = db[r][c]
@@ -4556,6 +4591,8 @@ func _draw_pieces(db: Array) -> void:
 			if is_hidden and not _is_visible_hidden(int(hidden_pieces[hpos]) % 100):
 				continue  # 对方的隐身棋子:完全看不到,不绘制
 			var center := _pos_px(hpos)
+			if anim_targets.has(center):
+				continue  # 动画棋子由动画层绘制
 			# 隐者:己方隐身棋子半透明显示(可见"隐身中",且不能吃子)
 			var alpha := 0.38 if is_hidden else 1.0
 			# 像素化圆棋子:先画深色大圆当描边,再画小一号的底色圆盖住中心(深色只在边缘露出 1px)
@@ -4566,9 +4603,28 @@ func _draw_pieces(db: Array) -> void:
 			var color: Color = _side_color(sid, alpha)
 			# 文字向右、上偏移(像素风浮雕):右 3px、上 1px
 			_draw_text(center + Vector2(3, -1), name, 27, color)
+	# 动画层:棋子从起点平滑移动到终点
+	for a in _move_anims:
+		var prog: float = clampf(a["t"] / a["dur"], 0.0, 1.0)
+		var eased := 1.0 - pow(1.0 - prog, 3.0)  # ease-out 立方
+		var fp: Vector2 = a["from_px"]
+		var tp: Vector2 = a["to_px"]
+		var pos: Vector2 = fp.lerp(tp, eased)
+		_draw_piece_center(pos, a["piece"])
 
 
 var _piece_tex: ImageTexture
+
+
+# 双人棋子绘制(可指定中心像素,用于移动动画插值)
+func _draw_piece_center(center: Vector2, p: Dictionary) -> void:
+	var alpha := 1.0
+	draw_texture_rect(_piece_texture(), Rect2(center - Vector2(24, 24), Vector2(48, 48)), false, Color(0.3, 0.22, 0.14, alpha))
+	draw_texture_rect(_piece_texture(), Rect2(center - Vector2(23, 23), Vector2(46, 46)), false, Color(0.95, 0.9, 0.78, alpha))
+	var sid: int = p["side"]
+	var name: String = R.PIECE_NAMES[p["type"]] if (sid == 0 or sid == 2) else R.PIECE_NAMES_BLACK[p["type"]]
+	var color: Color = _side_color(sid, alpha)
+	_draw_text(center + Vector2(3, -1), name, 27, color)
 
 
 # 棋子颜色:优先用大厅分配的 16 色;否则默认(0红 1黑 2绿 3蓝)
