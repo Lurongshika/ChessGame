@@ -52,6 +52,8 @@ func _ready() -> void:
 	add_child(btn6)
 	menu_btns.append(btn6)
 
+	# 按钮组在标题下方空间垂直居中(按钮数量变化时不再顶到屏幕下方)
+	_center_menu()
 	_build_user_button()
 	Global.animate_ui_in(self)
 
@@ -384,6 +386,22 @@ func _replay_menu_anim() -> void:
 func _set_menu_visible(v: bool) -> void:
 	for b in menu_btns:
 		b.visible = v
+
+
+# 主菜单按钮组垂直居中:标题下方剩余空间内整组居中
+# (按钮数量随"重连对局/继续对局"变化,固定 y 会把整组顶到屏幕下方)
+func _center_menu() -> void:
+	if menu_btns.is_empty():
+		return
+	var btn_h := 52
+	var gap := 70
+	var n := menu_btns.size()
+	var total_h := (n - 1) * gap + btn_h
+	var title_bottom := 170  # 标题"秘弈"底部(y=100, 高70)
+	var start_y := title_bottom + maxf((720 - title_bottom - total_h) / 2.0, 20)
+	for i in n:
+		var b: Button = menu_btns[i]
+		b.position = Vector2(540, start_y + i * gap)
 
 
 func _parse_port(text: String) -> int:
