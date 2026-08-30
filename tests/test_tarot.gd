@@ -55,7 +55,7 @@ func _test_all() -> void:
 	# 卡片控件构建(悬停提示节点可空)
 	var card := preload("res://scripts/perk_card.gd").new()
 	card.setup("yuzhe2", 0, "愚者·逆位", "主动 · 16回合", "复原所有棋子位置", load("res://fonts/zpix.ttf"), true, 100.0)
-	_check(card.get_child_count() >= 2, "塔罗卡构建成功(牌面+名字)")
+	_check(card.get_child_count() >= 1, "塔罗卡构建成功(单张牌面)")
 	card.free()
 
 	# 悬浮提示构建

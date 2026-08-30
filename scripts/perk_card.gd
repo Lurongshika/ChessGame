@@ -44,23 +44,6 @@ func setup(id: String, side_id: int, title: String, tip: String, desc: String, f
 	tex.flip_v = Tarot.is_reversed(id)
 	add_child(tex)
 
-	# 牌面底部:中文技能名(半透明黑条)
-	var n := Label.new()
-	n.text = title
-	n.add_theme_font_override("font", font)
-	n.add_theme_font_size_override("font_size", 12)
-	n.add_theme_color_override("font_color", Color(1, 0.95, 0.82))
-	n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	n.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	n.position = Vector2(0, -18)
-	n.size = Vector2(size.x, 18)
-	n.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE, Control.PRESET_MODE_KEEP_SIZE)
-	n.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var nb := StyleBoxFlat.new()
-	nb.bg_color = Color(0, 0, 0, 0.55)
-	n.add_theme_stylebox_override("normal", nb)
-	add_child(n)
-
 	_refresh_style(is_self, card_w)
 
 
