@@ -78,7 +78,7 @@ func _run() -> void:
 	scene._apply_state_data(data3)
 	_check(scene._board_to_json(scene.board) == after_net, "状态往返:黑方技能后棋盘一致")
 
-	# --- 女祭司(生成兵)往返 ---
+	# --- 女祭司(所有兵前进一格 + 补全兵线)往返 ---
 	scene.perks_black = {"nvjisi": true}
 	scene._setup_board()
 	scene.turn = R.Side.BLACK
@@ -91,7 +91,14 @@ func _run() -> void:
 			var p = scene.board[r][c]
 			if p != null and p["side"] == R.Side.BLACK and p["type"] == R.Type.PAWN:
 				pawns += 1
-	_check(pawns == 6, "女祭司:黑方多一枚兵(5+1)")
+	_check(pawns > 5, "女祭司:黑方兵数增加(原5个兵前进+补全)")
+	# 兵线(y=3)补满
+	var line_full := true
+	for c in R.COLS:
+		var q = scene.board[3][c]
+		if q == null or q["side"] != R.Side.BLACK or q["type"] != R.Type.PAWN:
+			line_full = false
+	_check(line_full, "女祭司:黑方兵线补满")
 	_check(scene._board_to_json(scene.board) == scene._board_to_json(scene.board), "状态往返:女祭司后棋盘自洽")
 
 	# --- 愚者:释放后跳过当前回合 ---

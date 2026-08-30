@@ -3391,9 +3391,13 @@ func _begin_turn() -> void:
 
 
 # 按棋子价值加权随机类型:弱子概率高(兵45%),强子概率低(车5%)
-func _random_piece_type() -> int:
+func _random_piece_type(no_pawn_advisor: bool = false) -> int:
 	var types := [R.Type.PAWN, R.Type.ROOK, R.Type.HORSE, R.Type.ELEPHANT, R.Type.ADVISOR, R.Type.CANNON]
 	var weights := [45, 5, 15, 10, 10, 15]
+	if no_pawn_advisor:
+		# 女祭司逆位:随机棋子去掉兵和士
+		types = [R.Type.ROOK, R.Type.HORSE, R.Type.ELEPHANT, R.Type.CANNON]
+		weights = [15, 30, 20, 35]
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	var total := 0
@@ -3405,7 +3409,7 @@ func _random_piece_type() -> int:
 		acc += weights[i]
 		if roll <= acc:
 			return types[i]
-	return R.Type.PAWN
+	return types[0]
 
 
 func _apply_dice(side: int, target_side: int) -> void:
@@ -4495,25 +4499,38 @@ func _activate_skill(perk_id: String, side: int) -> void:
 # ==================== 主动技能效果 ====================
 
 func _skill_priestess(perk_id: String, side: int) -> void:
-	# 女祭司:普通=兵线生成兵;进阶=底线生成随机棋子
-	var row := 6 if side == R.Side.RED else 3
 	if perk_id == "nvjisi2":
-		row = 9 if side == R.Side.RED else 0
-	var slots: Array[Vector2i] = []
-	for c in R.COLS:
-		if board[row][c] == null:
-			slots.append(Vector2i(c, row))
-	if slots.is_empty():
-		status_label.text = "兵线已满,无法生成"
-		return
-	var pos: Vector2i = slots.pick_random()
-	if perk_id == "nvjisi2":
-		var types := [R.Type.PAWN, R.Type.ROOK, R.Type.HORSE, R.Type.ELEPHANT, R.Type.ADVISOR, R.Type.CANNON]
-		board[pos.y][pos.x] = R.make_piece(side, _random_piece_type())
-		status_label.text = "女祭司:底线生成一个随机棋子"
+		# 进阶:底线生成随机棋子(去掉兵和士)
+		var row := 9 if side == R.Side.RED else 0
+		var slots: Array[Vector2i] = []
+		for c in R.COLS:
+			if board[row][c] == null:
+				slots.append(Vector2i(c, row))
+		if slots.is_empty():
+			status_label.text = "底线已满,无法生成"
+			return
+		var pos: Vector2i = slots.pick_random()
+		board[pos.y][pos.x] = R.make_piece(side, _random_piece_type(true))
+		status_label.text = "女祭司:底线生成一个随机棋子(兵士除外)"
 	else:
-		board[pos.y][pos.x] = R.make_piece(side, R.Type.PAWN)
-		status_label.text = "女祭司:兵线生成一枚兵"
+		# 普通:所有兵前进一格 + 补全兵线
+		var fwd := R.pawn_fwd(side)
+		var pawns: Array[Vector2i] = []
+		for r in R.ROWS:
+			for c in R.COLS:
+				var p = board[r][c]
+				if p != null and p["side"] == side and p["type"] == R.Type.PAWN:
+					pawns.append(Vector2i(c, r))
+		for pos in pawns:
+			var tgt: Vector2i = pos + fwd
+			if R.in_board(tgt) and board[tgt.y][tgt.x] == null:
+				board[tgt.y][tgt.x] = board[pos.y][pos.x]
+				board[pos.y][pos.x] = null
+		var row := 6 if side == R.Side.RED else 3
+		for c in R.COLS:
+			if board[row][c] == null:
+				board[row][c] = R.make_piece(side, R.Type.PAWN)
+		status_label.text = "女祭司:所有兵前进一格,补全兵线"
 	_apply_skill_cd(perk_id, side)
 	queue_redraw()
 	_consume_turn_after_skill()
@@ -7085,10 +7102,9 @@ func _apply_dice4(side: int, target_side: int) -> void:
 # ==================== 四人主动技能效果(复制双人,坐标按四方半场) ====================
 
 func _skill_priestess4(perk_id: String, side: int) -> void:
-	# 女祭司:普通=兵线生成兵;进阶=底线生成随机棋子
-	var slots: Array[Vector2i] = []
 	if perk_id == "nvjisi2":
-		# 底线:该方最外侧(黑y0 红y16 绿x0 蓝x16)
+		# 逆位:底线生成随机棋子(去掉兵和士)
+		var slots: Array[Vector2i] = []
 		var back: Array[Vector2i] = []
 		match side:
 			1: for i in 9: back.append(Vector2i(4 + i, 0))
@@ -7102,19 +7118,27 @@ func _skill_priestess4(perk_id: String, side: int) -> void:
 			_show_status4("底线已满,无法生成")
 			return
 		var pos: Vector2i = slots.pick_random()
-		board[pos.y][pos.x] = R.make_piece(side, _random_piece_type())
-		_show_status4("女祭司:底线生成一个随机棋子")
+		board[pos.y][pos.x] = R.make_piece(side, _random_piece_type(true))
+		_show_status4("女祭司:底线生成一个随机棋子(兵士除外)")
 	else:
+		# 正位:所有兵前进一格 + 补全兵线
+		var fwd4 := R.pawn_fwd(side)
+		var pawns4: Array[Vector2i] = []
+		for r in board.size():
+			for c in board[r].size():
+				var p = board[r][c]
+				if p != null and p["side"] == side and p["type"] == R.Type.PAWN:
+					pawns4.append(Vector2i(c, r))
+		for pos in pawns4:
+			var tgt4: Vector2i = pos + fwd4
+			if R.in_board(tgt4, board) and board[tgt4.y][tgt4.x] == null:
+				board[tgt4.y][tgt4.x] = board[pos.y][pos.x]
+				board[pos.y][pos.x] = null
 		for i in 9:
 			var lp := _line_pos4(side, i)
 			if board[lp.y][lp.x] == null:
-				slots.append(lp)
-		if slots.is_empty():
-			_show_status4("兵线已满,无法生成")
-			return
-		var pos2: Vector2i = slots.pick_random()
-		board[pos2.y][pos2.x] = R.make_piece(side, R.Type.PAWN)
-		_show_status4("女祭司:兵线生成一枚兵")
+				board[lp.y][lp.x] = R.make_piece(side, R.Type.PAWN)
+		_show_status4("女祭司:所有兵前进一格,补全兵线")
 	_apply_skill_cd4(perk_id, side)
 	queue_redraw()
 	_consume_turn_after_skill4()
