@@ -2248,6 +2248,13 @@ func send_profile(info: Dictionary) -> void:
 # 都会改变棋盘,主机在每次变更后广播完整对局状态,客户端直接采用,保证双方一致。
 
 # 序列化完整对局状态(纯 JSON 安全数据,用于 RPC 传输)
+func _poison_to_data() -> Dictionary:
+	var d := {}
+	for pos in poison_map:
+		d["%d,%d" % [pos.x, pos.y]] = int(poison_map[pos])
+	return d
+
+
 func _state_to_data() -> Dictionary:
 	var caps: Array = []
 	for rec in captured_history:
@@ -2296,6 +2303,9 @@ func _state_to_data() -> Dictionary:
 		"star2_charge": {"0": star2_charge[0], "1": star2_charge[1]},
 		"all_hidden_turns": {"0": all_hidden_turns[0], "1": all_hidden_turns[1]},
 		"skip_next_turn": {"0": skip_next_turn[0], "1": skip_next_turn[1]},
+		"poison_map": _poison_to_data(),
+		"death2_poison_active": death2_poison_active,
+		"death2_poison_caster": death2_poison_caster,
 		"perks_red": perks_red,
 		"perks_black": perks_black,
 		"invincible_piece": [invincible_piece.x, invincible_piece.y],
@@ -2391,6 +2401,12 @@ func _apply_state_data(data: Dictionary) -> void:
 	all_hidden_turns = {0: int(data.get("all_hidden_turns", {}).get("0", 0)), 1: int(data.get("all_hidden_turns", {}).get("1", 0))}
 	skip_next_turn = {0: bool(data.get("skip_next_turn", {}).get("0", false)), 1: bool(data.get("skip_next_turn", {}).get("1", false))}
 	star2_charge = {0: int(data.get("star2_charge", {}).get("0", 0)), 1: int(data.get("star2_charge", {}).get("1", 0))}
+	poison_map.clear()
+	for k in data.get("poison_map", {}):
+		var parts: PackedStringArray = k.split(",")
+		poison_map[Vector2i(int(parts[0]), int(parts[1]))] = int(data["poison_map"][k])
+	death2_poison_active = bool(data.get("death2_poison_active", false))
+	death2_poison_caster = int(data.get("death2_poison_caster", -1))
 	if data.has("perks_red"):
 		perks_red = data["perks_red"]
 		perks_black = data["perks_black"]
@@ -7105,6 +7121,13 @@ func _refresh_pope_guard_all4() -> void:
 
 # ==================== 联机四人:主机权威状态同步(复制双人逻辑,4 方版) ====================
 
+# 中毒状态序列化(Vector2i 键 → "x,y" 字符串键)
+func _poison4_to_data() -> Dictionary:
+	var d := {}
+	for pos in poison_map4:
+		d["%d,%d" % [pos.x, pos.y]] = int(poison_map4[pos])
+	return d
+
 func _state_to_data4() -> Dictionary:
 	var caps: Array = []
 	for rec in captured_history4:
@@ -7161,6 +7184,9 @@ func _state_to_data4() -> Dictionary:
 		"siwang_charge4": {"0": siwang_charge4[0], "1": siwang_charge4[1], "2": siwang_charge4[2], "3": siwang_charge4[3]},
 		"lianren2_charge4": {"0": lianren2_charge4[0], "1": lianren2_charge4[1], "2": lianren2_charge4[2], "3": lianren2_charge4[3]},
 		"star2_charge4": {"0": star2_charge4[0], "1": star2_charge4[1], "2": star2_charge4[2], "3": star2_charge4[3]},
+		"poison_map4": _poison4_to_data(),
+		"death2_poison_active4": death2_poison_active4,
+		"death2_poison_caster4": death2_poison_caster4,
 		"sync_pieces4": _sync_pieces_to_data4(),
 		"controlled_turns4": controlled_turns4,
 		"control_foreign4": {"0": control_foreign4[0], "1": control_foreign4[1], "2": control_foreign4[2], "3": control_foreign4[3]},
@@ -7253,6 +7279,12 @@ func _apply_state_data4(data: Dictionary) -> void:
 	siwang_charge4 = {0: int(data.get("siwang_charge4", {}).get("0", 0)), 1: int(data.get("siwang_charge4", {}).get("1", 0)), 2: int(data.get("siwang_charge4", {}).get("2", 0)), 3: int(data.get("siwang_charge4", {}).get("3", 0))}
 	lianren2_charge4 = {0: int(data.get("lianren2_charge4", {}).get("0", 0)), 1: int(data.get("lianren2_charge4", {}).get("1", 0)), 2: int(data.get("lianren2_charge4", {}).get("2", 0)), 3: int(data.get("lianren2_charge4", {}).get("3", 0))}
 	star2_charge4 = {0: int(data.get("star2_charge4", {}).get("0", 0)), 1: int(data.get("star2_charge4", {}).get("1", 0)), 2: int(data.get("star2_charge4", {}).get("2", 0)), 3: int(data.get("star2_charge4", {}).get("3", 0))}
+	poison_map4.clear()
+	for k in data.get("poison_map4", {}):
+		var parts: PackedStringArray = k.split(",")
+		poison_map4[Vector2i(int(parts[0]), int(parts[1]))] = int(data["poison_map4"][k])
+	death2_poison_active4 = bool(data.get("death2_poison_active4", false))
+	death2_poison_caster4 = int(data.get("death2_poison_caster4", -1))
 	sync_pieces4 = []
 	for q in data.get("sync_pieces4", []):
 		sync_pieces4.append(Vector2i(int(q[0]), int(q[1])))
