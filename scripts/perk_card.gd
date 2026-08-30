@@ -182,6 +182,15 @@ func set_fan(deg: float) -> void:
 	_fan = deg
 
 
+# 对局状态:ready=充能完毕闪箔流光,disabled=审判禁用红色,passive=被动卡青色(3 种 shader)
+func set_game_state(ready: bool, disabled: bool, passive: bool) -> void:
+	if _mat == null:
+		return
+	_mat.set_shader_parameter("ready", 1.0 if ready else 0.0)
+	_mat.set_shader_parameter("disabled", 1.0 if disabled else 0.0)
+	_mat.set_shader_parameter("passive", 1.0 if passive else 0.0)
+
+
 # 边框样式:bg_tint 玩家色;默认深色底 + 细边框(选中态由 shader 描边表现)
 func _refresh_style(is_self: bool, card_w: float = 0.0) -> void:
 	var bg := StyleBoxFlat.new()

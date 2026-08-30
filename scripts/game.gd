@@ -643,9 +643,33 @@ func _refresh_perk_panels4() -> void:
 				# 四人:技能卡边框用该方玩家颜色
 				card.bg_tint = _side_color(side)
 				card._refresh_style(true, FOUR_CARD_W)
+				# 对局状态 shader:审判禁用红/被动卡青/充能完毕闪箔
+				var active := _is_active_skill(id)
+				var disc: bool = disabled_skills4[side] == id
+				var ps: bool = (not disc) and (not active)
+				var rd: bool = (not disc) and active and _skill_ready4(side, id)
+				card.set_game_state(rd, disc, ps)
 				card.clicked.connect(_on_perk_clicked4)
 				box.add_child(card)
 		_position_four_box(box, side)
+
+
+# 四人:主动技能是否"就绪"(冷却完毕/充能满)
+func _skill_ready4(side: int, perk_id: String) -> bool:
+	if perk_id == "huanghou":
+		var cap := 3 if perks4[side].has("liliang2") else 1
+		return queen_charge4[side] >= cap
+	if perk_id == "siwang":
+		var cap := 9 if perks4[side].has("liliang2") else 3
+		return siwang_charge4[side] >= cap
+	if perk_id == "lianren2":
+		return lianren2_charge4[side] >= 2
+	if perk_id == "xingxing2":
+		return star2_charge4.get(side, 0) > 0
+	var cd := _skill_cd_value(perk_id)
+	if cd > 0:
+		return int(skill_cd4.get(side, {}).get(perk_id, 0)) <= 0
+	return true
 
 
 # 按角落定位四人技能卡列(上方角落卡列在头像下方,下方角落卡列在头像上方)
@@ -4366,8 +4390,32 @@ func _add_perk_cards(box: Container, side_id: int, is_self: bool) -> void:
 			tip += "  [%s]" % prog
 		var card := PerkCard.new()
 		card.setup(id, side_id, info["name"], tip, info["desc"], _font(), is_self, 110.0, _tip)
+		# 对局状态 shader:审判禁用红/被动卡青/充能完毕闪箔
+		var active := _is_active_skill(id)
+		var disc: bool = disabled_skills[side_id] == id
+		var ps: bool = (not disc) and (not active)
+		var rd: bool = (not disc) and active and _skill_ready(side_id, id)
+		card.set_game_state(rd, disc, ps)
 		card.clicked.connect(_on_perk_clicked)
 		box.add_child(card)
+
+
+# 主动技能是否"就绪"(冷却完毕/充能满)
+func _skill_ready(side: int, perk_id: String) -> bool:
+	if perk_id == "huanghou":
+		var cap := 3 if perks_of(side).has("liliang2") else 1
+		return queen_charge[side] >= cap
+	if perk_id == "siwang":
+		var cap := 9 if perks_of(side).has("liliang2") else 3
+		return siwang_charge[side] >= cap
+	if perk_id == "lianren2":
+		return lianren2_charge[side] >= 2
+	if perk_id == "xingxing2":
+		return star2_charge.get(side, 0) > 0
+	var cd := _skill_cd_value(perk_id)
+	if cd > 0:
+		return int(skill_cd.get(side, {}).get(perk_id, 0)) <= 0
+	return true
 
 
 func _on_perk_clicked(perk_id: String, side: int) -> void:

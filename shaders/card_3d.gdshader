@@ -15,6 +15,10 @@ uniform float inset : hint_range(0, 1) = 0.0;
 
 // 选中确认感:金色脉动描边 + 增亮
 uniform float selected : hint_range(0.0, 1.0) = 0.0;
+// 对局状态:ready=充能完毕闪箔流光;disabled=审判禁用红色;passive=被动卡另一种
+uniform float ready : hint_range(0.0, 1.0) = 0.0;
+uniform float disabled : hint_range(0.0, 1.0) = 0.0;
+uniform float passive : hint_range(0.0, 1.0) = 0.0;
 uniform float time = 0.0;
 
 varying flat vec2 o;
@@ -62,6 +66,29 @@ void fragment() {
 		col.rgb = mix(col.rgb, vec3(1.0, 0.82, 0.3), band * clamp(selected * pulse * 0.85, 0.0, 0.9));
 		col.rgb += vec3(1.0, 0.9, 0.55) * band * pulse * selected * 0.5;
 		col.rgb = mix(col.rgb, col.rgb * 1.15, selected);
+	}
+
+	// 充能完毕:闪箔虹彩流光(参考 balatro POLYCHROME 闪箔)
+	if (ready > 0.01) {
+		float band = sin((v_uv.x + v_uv.y) * 34.0 - time * 6.0);
+		float sheen = smoothstep(0.55, 1.0, band);
+		col.rgb += vec3(0.7, 0.85, 1.0) * sheen * 0.65;
+		col.rgb = mix(col.rgb, col.rgb * vec3(1.0, 0.92, 1.05), 0.22);
+	}
+
+	// 被动卡(未禁用):柔和青色冷光,呼吸微亮,区别于选中金/禁用红
+	if (passive > 0.01) {
+		float br = 0.5 + 0.5 * sin(time * 2.0);
+		col.rgb = mix(col.rgb, col.rgb * vec3(0.82, 1.0, 0.95), 0.35);
+		col.rgb += vec3(0.2, 0.62, 0.75) * br * 0.18;
+		float edge2 = min(min(v_uv.x, 1.0 - v_uv.x), min(v_uv.y, 1.0 - v_uv.y));
+		col.rgb += vec3(0.3, 0.8, 1.0) * smoothstep(0.14, 0.03, edge2) * 0.15;
+	}
+
+	// 审判禁用:红色暗调 + 半透明,呈"禁止使用"状态
+	if (disabled > 0.01) {
+		col.rgb = mix(col.rgb, vec3(0.9, 0.12, 0.12), 0.55);
+		col.a *= 0.72;
 	}
 	COLOR = col;
 }
