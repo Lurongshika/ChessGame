@@ -58,14 +58,26 @@ void fragment() {
 	vec4 col = texture(TEXTURE, uv + 0.5);
 	col.a *= step(max(abs(uv.x), abs(uv.y)), 0.5);
 
-	// 选中确认感:卡牌边缘混成亮金色描边 + 柔光(常亮脉动)
+	// 选中确认感:虹彩闪箔(参考 balatro POLYCHROME)+ 亮金发光边框(非常醒目)
 	if (selected > 0.01) {
 		float edge = min(min(v_uv.x, 1.0 - v_uv.x), min(v_uv.y, 1.0 - v_uv.y));
-		float band = smoothstep(0.17, 0.03, edge);
-		float pulse = 0.8 + 0.2 * sin(time * 6.0);
-		col.rgb = mix(col.rgb, vec3(1.0, 0.82, 0.3), band * clamp(selected * pulse * 0.85, 0.0, 0.9));
-		col.rgb += vec3(1.0, 0.9, 0.55) * band * pulse * selected * 0.5;
-		col.rgb = mix(col.rgb, col.rgb * 1.15, selected);
+		float tsp = (v_uv.x + v_uv.y) * 6.0 + time * 1.5;
+		vec3 holo = 0.5 + 0.5 * cos(6.2831 * (tsp + vec3(0.0, 0.33, 0.67)));
+		float pulse = 0.8 + 0.2 * sin(time * 7.0);
+		// 整卡叠一层虹彩
+		col.rgb = mix(col.rgb, col.rgb * (0.72 + holo * 0.55), 0.4 * selected);
+		// 斜向扫过的虹彩流光带
+		float band = sin((v_uv.x + v_uv.y) * 26.0 - time * 5.0);
+		float sheen = smoothstep(0.3, 1.0, band);
+		col.rgb += holo * sheen * 0.55 * selected;
+		// 亮金边框(替换卡面边缘)
+		vec3 gold = vec3(1.0, 0.9, 0.45);
+		float frame = smoothstep(0.20, 0.025, edge);
+		col.rgb = mix(col.rgb, gold * (1.05 + 0.35 * pulse), frame * clamp(selected * 0.95, 0.0, 1.0));
+		// 边框外侧柔光
+		float bloom = smoothstep(0.30, 0.0, edge) - smoothstep(0.12, 0.0, edge);
+		col.rgb += gold * bloom * pulse * selected * 0.9;
+		col.rgb = mix(col.rgb, col.rgb * 1.18, selected);
 	}
 
 	// 充能完毕:闪箔虹彩流光(参考 balatro POLYCHROME 闪箔)
