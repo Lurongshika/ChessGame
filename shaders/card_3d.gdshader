@@ -54,13 +54,13 @@ void fragment() {
 	vec4 col = texture(TEXTURE, uv + 0.5);
 	col.a *= step(max(abs(uv.x), abs(uv.y)), 0.5);
 
-	// 选中确认感:金色脉动描边 + 亮度提升
+	// 选中确认感:金色脉动描边 + 亮度提升(常亮,脉动不归零)
 	if (selected > 0.01) {
 		float edge = min(min(v_uv.x, 1.0 - v_uv.x), min(v_uv.y, 1.0 - v_uv.y));
-		float band = smoothstep(0.09, 0.012, edge);
-		float pulse = 0.5 + 0.5 * sin(time * 8.0);
-		col.rgb = mix(col.rgb, col.rgb * 1.12, selected);
-		col.rgb += vec3(1.0, 0.85, 0.35) * band * pulse * selected * 0.9;
+		float band = smoothstep(0.11, 0.02, edge);
+		float pulse = 0.75 + 0.25 * sin(time * 6.0);
+		col.rgb = mix(col.rgb, col.rgb * 1.18, selected);
+		col.rgb += vec3(1.0, 0.85, 0.35) * band * pulse * selected * 1.25;
 	}
 	COLOR = col;
 }

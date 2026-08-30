@@ -9,7 +9,9 @@ signal clicked(perk_id: String, side: int)
 const Tarot := preload("res://scripts/tarot.gd")
 
 const CARD3D := preload("res://shaders/card_3d.gdshader")
-const MAX_TILT := 22.0  # 悬浮偏转最大角度(度)
+const MAX_TILT := 11.0        # 悬浮偏转最大角度(度,限制为原一半)
+const FLOAT_LIFT := 14.0      # 选中浮动上移量(像素)
+const FLOAT_BOB := 3.0        # 选中浮动上下摆幅(像素)
 
 var perk_id := ""
 var _side := -1
@@ -25,6 +27,8 @@ var _mat: ShaderMaterial
 var _tex: TextureRect
 var _hover := false
 var _rot_x := 0.0
+var _base_pos := Vector2.ZERO   # 初始槽位(悬浮/浮动以此为基准)
+var _base_captured := false
 var _rot_y := 0.0
 var _curr_scale := 1.0
 
@@ -86,6 +90,8 @@ func _process(delta: float) -> void:
 			z = Vector2.ONE
 		var frac: Vector2 = local / z
 		var off := (frac - Vector2(0.5, 0.5)) * 2.0
+		off.x = clampf(off.x, -1.0, 1.0)
+		off.y = clampf(off.y, -1.0, 1.0)
 		target_rx = off.y * MAX_TILT
 		target_ry = -off.x * MAX_TILT
 		target_scale = 1.12
@@ -99,6 +105,17 @@ func _process(delta: float) -> void:
 
 	pivot_offset = size / 2.0
 	scale = Vector2(_curr_scale, _curr_scale)
+
+	# 选中浮动:卡牌上浮 + 轻微上下漂浮(初始槽位为基准)
+	if not _base_captured and size != Vector2.ZERO:
+		_base_pos = position
+		_base_captured = true
+	var target_y := _base_pos.y
+	if selected:
+		var t := Time.get_ticks_msec() / 1000.0
+		target_y = _base_pos.y - FLOAT_LIFT + sin(t * 3.0) * FLOAT_BOB
+	position.y = lerpf(position.y, target_y, k)
+	position.x = _base_pos.x
 
 
 # 鼠标悬浮:3D 偏转 + 显示技能信息
