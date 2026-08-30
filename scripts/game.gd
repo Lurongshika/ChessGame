@@ -4971,9 +4971,10 @@ func _handle_swap_target(pos: Vector2i, side: int, perk_id: String) -> void:
 	status_label.text = "魔术师:两子位置已交换"
 	_show_skill_announce(perk_id, side)
 	_refresh_move_log()
+	# 魔术师消耗本回合(本地/主机一致),技能后轮到对方
+	_consume_turn_after_skill()
 	if net_role == "host":
 		notify_skill_used.rpc(perk_id, side)
-		_consume_turn_after_skill()
 		_broadcast_state()
 
 
