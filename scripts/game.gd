@@ -136,7 +136,7 @@ var free_retreat4_targets: Array[Vector2i] = []  # 四人:星星免费移兵落�
 var free_retreat4_used := false                   # 四人:星星正位每回合一次
 var draft4_side := 0        # 四人 DRAFT:当前选技能方
 var kill_count4 := {0: 0, 1: 0, 2: 0, 3: 0}  # 四人杀棋计数
-var grey_side4 := -1           # 将帅被杀后变灰保留的方(-1=无)
+var grey_sides4 := {}           # 将帅被杀后变灰保留的方集合({side:true},支持多方)
 var in_check4 := {0: false, 1: false, 2: false, 3: false}  # 四人:各方王是否被将
 var _prev_check4 := {0: false, 1: false, 2: false, 3: false}  # 四人:上一次被将(用于上升沿警报)
 var draft4_round := 0
@@ -3121,6 +3121,7 @@ func _start_four_game() -> void:
 	board = R.make_board4()
 	_apply_four_skills_setup()
 	_refresh_perk_panels4()
+	grey_sides4 = {}
 	in_check4 = {0: false, 1: false, 2: false, 3: false}
 	_prev_check4 = {0: false, 1: false, 2: false, 3: false}
 	# 愚者·逆位:开局无充能(满 CD,需 16 回合充能)
@@ -5771,6 +5772,9 @@ func _draw_pieces(db: Array) -> void:
 			var color: Color = _side_color(sid, alpha)
 			# 文字向右、上偏移(像素风浮雕):右 3px、上 1px
 			_draw_text(center + Vector2(3, -1), name, 27, color)
+			# 死亡状态:棋子外圈灰色描边
+			if poison_map.has(hpos):
+				draw_arc(center, 22.5, 0, TAU, 30, Color(0.55, 0.55, 0.55, alpha), 2.6)
 	# 动画层:棋子从起点平滑移动到终点
 	for a in _move_anims:
 		var prog: float = clampf(a["t"] / a["dur"], 0.0, 1.0)
@@ -6010,7 +6014,7 @@ func _draw_pieces4() -> void:
 				continue  # 动画棋子由动画层绘制
 			# 己方隐身子:半透明显示(可见"隐身中",且不能吃子)
 			var alpha := 0.38 if is_hidden else 1.0
-			_draw_piece4(center, p, alpha)
+			_draw_piece4(center, p, alpha, hpos)
 	# 动画层:棋子从起点平滑移动到终点
 	for a in _move_anims:
 		var prog: float = clampf(a["t"] / a["dur"], 0.0, 1.0)
@@ -6055,16 +6059,19 @@ func _draw_debris() -> void:
 
 
 # 绘制单个棋子(圆 + 名字 + 颜色,可指定中心像素)
-func _draw_piece4(center: Vector2, p: Dictionary, alpha: float = 1.0) -> void:
+func _draw_piece4(center: Vector2, p: Dictionary, alpha: float = 1.0, pos: Vector2i = Vector2i(-1, -1)) -> void:
 	draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(15, 15), Vector2(30, 30)), false, Color(0.3, 0.22, 0.14, alpha))
 	draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(14, 14), Vector2(28, 28)), false, Color(0.95, 0.9, 0.78, alpha))
 	var sid: int = p["side"]
 	var piece_col: Color = _side_color(sid, alpha)
-	if grey_side4 == sid:
+	if grey_sides4.has(sid):
 		piece_col = Color(0.55, 0.55, 0.55, alpha)
 		draw_texture_rect(_piece_texture4(), Rect2(center - Vector2(14, 14), Vector2(28, 28)), false, Color(0.5, 0.5, 0.5, alpha))
 	var name: String = R.PIECE_NAMES[p["type"]] if (sid == 0 or sid == 2) else R.PIECE_NAMES_BLACK[p["type"]]
 	_draw_text(center + Vector2(2, -1), name, 16, piece_col)
+	# 死亡状态:棋子外圈灰色描边
+	if pos.x >= 0 and poison_map4.has(pos):
+		draw_arc(center, 16.5, 0, TAU, 26, Color(0.55, 0.55, 0.55, alpha), 2.2)
 
 
 func _draw_particles4() -> void:
@@ -6676,7 +6683,7 @@ func _inherit_pieces4(dead: int, killer: int) -> void:
 
 # 将帅被杀后-变灰:棋子保留但灰化(仅移除王)
 func _grey_keep_pieces4(dead: int) -> void:
-	grey_side4 = dead
+	grey_sides4[dead] = true
 	# 移除王(王已被吃),其他棋子保留灰化
 	for r in board.size():
 		for c in board[r].size():
