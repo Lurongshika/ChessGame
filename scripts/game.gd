@@ -2930,8 +2930,8 @@ func _validate_move(from: Vector2i, to: Vector2i, kind: String, side: int, skip_
 	var p = board[from.y][from.x]
 	if p == null or side != turn:
 		return false
-	# 同一子本回合已移动过,不能再动(技能可移多子,但同一子每回合一次)
-	if from in _turn_moved:
+	# 同一子本回合已移动过,不能再动(技能可移多子,但同一子每回合一次;星星/月亮免费移动不受限)
+	if kind != "free_retreat" and kind != "free_elephant" and from in _turn_moved:
 		return false
 	# 倒吊人逆位:全棋子控制期可移动对方任意棋子(每子每回合一次)
 	var all_control: bool = controlled_all_turns > 0 and controlled_all_owner == turn
@@ -3999,7 +3999,6 @@ func _birth_pos(side: int, type: int) -> Vector2i:
 func _perform_free_retreat(from: Vector2i, to: Vector2i) -> void:
 	# 星星:兵无代价移动一格,不消耗行动次数
 	_record_move(from, to, "free_retreat")
-	_turn_moved.append(to)
 	var p = board[from.y][from.x]
 	board[from.y][from.x] = null
 	board[to.y][to.x] = p
@@ -4019,7 +4018,6 @@ func _perform_free_retreat(from: Vector2i, to: Vector2i) -> void:
 func _perform_free_elephant(from: Vector2i, to: Vector2i) -> void:
 	# 月亮逆位:象无代价移动到空格,不消耗行动次数,不结束回合
 	_record_move(from, to, "free_elephant")
-	_turn_moved.append(to)
 	var p = board[from.y][from.x]
 	board[from.y][from.x] = null
 	board[to.y][to.x] = p
@@ -6466,7 +6464,7 @@ func _move4_rejected(from: Vector2i, to: Vector2i, side: int) -> bool:
 	var mover = board[from.y][from.x]
 	if mover == null:
 		return true
-	# 同一子本回合已移动过,不能再动
+	# 同一子本回合已移动过,不能再动(星星免费移动不受限)
 	if from in _turn_moved4:
 		return true
 	# 倒吊人正位切换模式:只能操控非己方棋子;被操控的非己方棋子每子每回合限移一次
@@ -6520,7 +6518,8 @@ func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 	var side: int = mover["side"]
 	if _move4_rejected(from, to, side):
 		return
-	_turn_moved4.append(to)  # 本回合已动过的子,同一子每回合一次
+	if kind != "free_retreat":
+		_turn_moved4.append(to)  # 本回合已动过的子,同一子每回合一次(星星免费移动不纳入)
 	var captured = board[to.y][to.x]
 	board[to.y][to.x] = mover
 	board[from.y][from.x] = null
