@@ -206,6 +206,8 @@ var four_result_root: Control  # 四人:结算遮罩(返回大厅)
 var net_wait_label: Label
 var chat: Panel  # 对局聊天栏
 var _tip: Control  # 塔罗牌技能信息悬浮提示(共享)
+var _tip_is_piece := false    # 当前 tooltip 是否显示棋子状态
+var _piece_last_key := ""     # 上次棋子状态内容(避免每帧重建)
 var record_panel: Panel  # 对局记录中心悬浮窗
 var record_btn: Button  # 屏幕下方对局记录按钮
 var record_box: VBoxContainer
@@ -860,7 +862,7 @@ func _start_targeting4(perk_id: String, side: int) -> void:
 		"zhanche", "zhanche2":
 			_show_status4("选择己方的车")
 		"siwang":
-			_show_status4("选择对方一子(使其中毒2回合,移动解毒)")
+			_show_status4("选择对方一子(使其进入死亡状态2回合,移动解毒)")
 		"diaodiao", "diaodiao2":
 			_show_status4("选择要控制的对方棋子")
 		"yinzhe":
@@ -1023,7 +1025,7 @@ func _apply_hermit_target4(a: Vector2i, b: Vector2i, side: int) -> void:
 func _handle_death_target4(pos: Vector2i, side: int) -> void:
 	var p = board[pos.y][pos.x]
 	if p == null or p["side"] == side:
-		_show_status4("请选择对方的棋子(中毒)")
+		_show_status4("请选择对方的棋子(使其进入死亡状态)")
 		return
 	if siwang_charge4[side] < 3:
 		_show_status4("[死亡] 充能中:己方每被吃 1 子 +1(需 3 点)")
@@ -4379,8 +4381,117 @@ func _process(delta: float) -> void:
 		position = Vector2(rng.randf_range(-1, 1), rng.randf_range(-1, 1)) * _shake_strength * prog
 	else:
 		position = Vector2.ZERO
+	# 棋子悬停:查看棋子状态与剩余回合(跟随鼠标解释框)
+	_update_piece_tooltip()
 
 
+# 鼠标悬停棋子时,用共享解释框显示棋子当前状态与剩余回合
+func _update_piece_tooltip() -> void:
+	if _tip == null or phase != Phase.PLAY or replay_mode:
+		return
+	if _tip.get("showing_card") == true:
+		return  # 技能卡提示优先,不覆盖
+	var m := get_viewport().get_mouse_position()
+	var pos: Vector2i
+	var piece = null
+	if four_mode:
+		var c := roundi((m.x - ORIGIN4.x) / CELL4)
+		var r := roundi((m.y - ORIGIN4.y) / CELL4)
+		if c < 0 or c >= GRID4 or r < 0 or r >= GRID4:
+			pos = Vector2i(-1, -1)
+		else:
+			pos = _unrot4(Vector2i(c, r))
+			piece = board[pos.y][pos.x] if R.in_board(pos, board) else null
+	else:
+		var c := roundi((m.x - ORIGIN.x) / CELL)
+		var r := roundi((m.y - ORIGIN.y) / CELL)
+		if flip_board:
+			c = (R.COLS - 1) - c
+			r = (R.ROWS - 1) - r
+		pos = Vector2i(c, r)
+		piece = board[pos.y][pos.x] if R.in_board(pos) else null
+	if piece == null:
+		# 仅当当前显示的是棋子提示时才隐藏(避免误隐藏技能卡提示)
+		if _tip_is_piece:
+			_tip.hide_tip()
+			_tip_is_piece = false
+			_piece_last_key = ""
+		return
+	var title := _piece_display_name(piece)
+	var lines := _piece_status_lines4(pos, piece) if four_mode else _piece_status_lines(pos, piece)
+	var body := "\n".join(lines)
+	var key := title + "|" + body
+	if key == _piece_last_key:
+		return
+	_piece_last_key = key
+	_tip_is_piece = true
+	_tip.show_text(title, body)
+
+
+func _piece_display_name(p: Dictionary) -> String:
+	var side_name: String = ("红方" if p["side"] == R.Side.RED else "黑方") if not four_mode else SIDE_NAMES4[p["side"]]
+	var pn: String = R.PIECE_NAMES[p["type"]] if p["side"] == R.Side.RED else R.PIECE_NAMES_BLACK[p["type"]]
+	return "%s %s" % [side_name, pn]
+
+
+# 收集棋子当前附着状态与剩余回合(死亡/无敌/隐身/保护/反制/控制等)
+func _piece_status_lines(pos: Vector2i, p: Dictionary) -> Array:
+	var side: int = p["side"]
+	var lines: Array = []
+	if poison_map.has(pos):
+		lines.append("死亡状态:剩余 %d 回合(移动解毒,到期摧毁)" % int(poison_map[pos]))
+	if invincible_piece == pos and invincible_piece_turns > 0:
+		lines.append("皇帝无敌:剩余 %d 回合" % invincible_piece_turns)
+	if invincible_side == side and invincible_side_turns > 0:
+		lines.append("皇后无敌:剩余 %d 回合" % invincible_side_turns)
+	if hidden_pieces.has(pos):
+		lines.append("隐身:剩余 %d 回合" % int(hidden_turns.get(pos, 0)))
+	if pope_guarded.has(pos):
+		lines.append("教皇保护(无敌)")
+	if pope_countered.has(pos):
+		lines.append("反制(被吃同归于尽)")
+	if suicide_mark.get("pos") == pos:
+		lines.append("反制(被吃同归于尽)")
+	if counter_side == side:
+		lines.append("反制(被吃同归于尽)")
+	if controlled_piece.get("pos") == pos:
+		lines.append("被倒吊人控制")
+	if death2_poison_active and side != death2_poison_caster:
+		lines.append("死亡逆位:本回合移动将进入死亡状态")
+	if lines.is_empty():
+		lines.append("无特殊状态")
+	return lines
+
+
+# 四人:棋子状态收集
+func _piece_status_lines4(pos: Vector2i, p: Dictionary) -> Array:
+	var side: int = p["side"]
+	var lines: Array = []
+	if poison_map4.has(pos):
+		lines.append("死亡状态:剩余 %d 回合(移动解毒,到期摧毁)" % int(poison_map4[pos]))
+	if invincible_piece4 == pos and invincible_piece_turns4 > 0:
+		lines.append("皇帝无敌:剩余 %d 回合" % invincible_piece_turns4)
+	if invincible_side4 == side and invincible_side_turns4 > 0:
+		lines.append("皇后无敌:剩余 %d 回合" % invincible_side_turns4)
+	if hidden_pieces4.has(pos):
+		lines.append("隐身:剩余 %d 回合" % int(hidden_turns4.get(pos, 0)))
+	if pope_guarded4.has(pos):
+		lines.append("教皇保护(无敌)")
+	if pope_countered4.has(pos):
+		lines.append("反制(被吃同归于尽)")
+	if suicide_mark4.get("pos") == pos:
+		lines.append("反制(被吃同归于尽)")
+	if counter_side4 == side:
+		lines.append("反制(被吃同归于尽)")
+	if controlled_piece4.get("pos") == pos:
+		lines.append("被倒吊人控制")
+	if death2_poison_active4 and side != death2_poison_caster4:
+		lines.append("死亡逆位:本回合移动将进入死亡状态")
+	if lines.is_empty():
+		lines.append("无特殊状态")
+	return lines
+
+# 收集棋子当前附着状态与剩余回合(死亡/无敌/隐身/保护/反制/控制等)
 func _win(side: int, reason := "") -> void:
 	phase = Phase.OVER
 	winner = side
@@ -4984,7 +5095,7 @@ func _skill_death2(side: int) -> void:
 	death2_poison_active = true
 	death2_poison_caster = side
 	_apply_skill_cd("siwang2", side)
-	status_label.text = "死亡:下回合移动的非己方棋子将中毒3回合"
+	status_label.text = "死亡:下回合移动的非己方棋子将进入死亡状态3回合"
 	_refresh_move_log()
 	queue_redraw()
 	_consume_turn_after_skill()
@@ -5003,7 +5114,7 @@ func _start_targeting(perk_id: String, side: int) -> void:
 		"zhanche", "zhanche2":
 			status_label.text = "选择己方的车"
 		"siwang":
-			status_label.text = "选择对方一子(使其中毒2回合,移动解毒)"
+			status_label.text = "选择对方一子(使其进入死亡状态2回合,移动解毒)"
 		"diaodiao", "diaodiao2":
 			status_label.text = "选择要控制的对方棋子"
 		"yinzhe":
@@ -5127,7 +5238,7 @@ func _handle_king_counter(pos: Vector2i, side: int) -> void:
 func _handle_death_target(pos: Vector2i, side: int) -> void:
 	var p = board[pos.y][pos.x]
 	if p == null or p["side"] == side:
-		status_label.text = "请选择对方的棋子(中毒)"
+		status_label.text = "请选择对方的棋子(使其进入死亡状态)"
 		return
 	if siwang_charge[side] < 3:
 		status_label.text = "[死亡] 充能中:己方每被吃 1 子 +1(需 3 点)"
@@ -7591,6 +7702,6 @@ func _skill_death2_4(side: int) -> void:
 	death2_poison_active4 = true
 	death2_poison_caster4 = side
 	_apply_skill_cd4("siwang2", side)
-	_show_status4("死亡:下回合移动的非己方棋子将中毒3回合")
+	_show_status4("死亡:下回合移动的非己方棋子将进入死亡状态3回合")
 	queue_redraw()
 	_consume_turn_after_skill4()

@@ -14,6 +14,7 @@ const FONT_SIZE := 12
 var _perk_id := ""
 var _font: Font
 var pinned := false  # true 时不跟随鼠标(调试/固定展示用)
+var showing_card := false  # 当前是否显示技能卡信息(棋子悬停不该覆盖)
 var _name_label: Label
 var _tip_label: Label
 var _desc_vbox: VBoxContainer
@@ -84,12 +85,41 @@ func show_for(perk_id: String, name: String, tip: String, desc: String) -> void:
 	dv.position = Vector2(tx, top + 46.0)
 	add_child(dv)
 
+	showing_card = true
+	visible = true
+	queue_redraw()
+
+
+# 通用文本提示(棋子状态等):标题 + 多行正文,跟随鼠标
+func show_text(title: String, body: String) -> void:
+	hide_tip()
+	showing_card = false
+	_perk_id = "__piece__"
+	var tw := W - PAD * 2
+	var t := _label(title, 16, Color(1, 0.92, 0.72))
+	t.position = Vector2(PAD, 9)
+	t.size = Vector2(tw, 24)
+	add_child(t)
+	var d := _label(body, 11, Color(0.9, 0.88, 0.82))
+	d.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	d.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	d.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var dv := VBoxContainer.new()
+	dv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dv.add_child(d)
+	var body_h := maxf(_font.get_multiline_string_size(body, HORIZONTAL_ALIGNMENT_LEFT, tw, 11).y, 18.0)
+	dv.size = Vector2(tw, body_h)
+	dv.custom_minimum_size = Vector2(tw, 0)
+	dv.position = Vector2(PAD, 38)
+	add_child(dv)
+	size = Vector2(W, 38.0 + body_h + PAD)
 	visible = true
 	queue_redraw()
 
 
 func hide_tip() -> void:
 	_perk_id = ""
+	showing_card = false
 	visible = false
 	# 子节点均为纯展示控件(无信号连接),立即释放保证确定性
 	for c in get_children():
