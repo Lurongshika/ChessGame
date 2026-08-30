@@ -41,8 +41,7 @@ func show_for(perk_id: String, name: String, tip: String, desc: String) -> void:
 	tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tex.texture = Tarot.texture(perk_id)
-	tex.flip_v = Tarot.is_reversed(perk_id)
+	tex.texture = Tarot.texture(perk_id)  # 逆位已烘焙翻转
 	add_child(tex)
 
 	var tx := PAD + THUMB + 10.0

@@ -1681,9 +1681,8 @@ func _select_skill(id: String) -> void:
 	info_title.text = pk.get("name", id)
 	info_tip.text = pk.get("tip", "")
 	info_desc.text = _full_desc(id)
-	# 中间大牌面:正位/逆位
+	# 中间大牌面:正位/逆位(逆位已烘焙翻转)
 	_info_card.texture = Tarot.texture(id)
-	_info_card.flip_v = Tarot.is_reversed(id)
 
 
 # 最右侧按钮:进入模拟对局(玩家拥有当前技能 vs 无技能机器人)

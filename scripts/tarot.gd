@@ -45,11 +45,26 @@ static func texture_path(perk_id: String) -> String:
 		return ""
 	return "%s/%d_%s.png" % [DIR, idx, CARD_NAMES[idx]]
 
+static var _flipped_cache := {}  # 逆位已翻转的 ImageTexture(懒加载缓存)
+
+
+# 返回牌面纹理:正位用原图,逆位已垂直翻转(烘焙进纹理,避免与自定义 shader 的 flip_v 冲突)
 static func texture(perk_id: String) -> Texture2D:
 	var p := texture_path(perk_id)
 	if p.is_empty() or not ResourceLoader.exists(p):
 		return null
-	return load(p)
+	var src: Texture2D = load(p)
+	if not is_reversed(perk_id):
+		return src
+	if _flipped_cache.has(perk_id):
+		return _flipped_cache[perk_id]
+	var img := src.get_image()
+	if img == null:
+		return src
+	img.flip_y()
+	var flipped := ImageTexture.create_from_image(img)
+	_flipped_cache[perk_id] = flipped
+	return flipped
 
 # 按牌面宽高比换算:给定宽度返回标准尺寸
 static func card_size(w: float) -> Vector2:

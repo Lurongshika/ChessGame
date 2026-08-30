@@ -541,8 +541,15 @@ func _update_progress4() -> void:
 			l.text = "存活"
 
 
+# 四人模式:各玩家头像角落坐标(与 _make_badge_frame 一致)
+const FOUR_CORNERS := {1: Vector2(24, 60), 3: Vector2(1280 - 24 - 240, 60), 0: Vector2(24, 720 - 16 - 66), 2: Vector2(1280 - 24 - 240, 720 - 16 - 66)}
+# 上方角落(1/3)卡牌列在头像下方;下方角落(0/2)在头像上方,避免出屏
+const FOUR_CARD_ABOVE := {1: false, 3: false, 0: true, 2: true}
+const FOUR_CARD_W := 72.0  # 四人模式技能卡宽度(悬停放大+3D 偏转)
+
+
 func _build_ui4() -> void:
-	# 四人模式:不构建对局记录/玩家徽章/双人技能面板,改为四悬浮窗(四方技能)
+	# 四人模式:不构建对局记录/玩家徽章/双人技能面板,改为四方头像 + 头像旁技能卡列
 	# 左上角:当前模式名
 	_four_mode_label = _make_label(_mode_name4(), 26, Color(0.95, 0.85, 0.6))
 	_four_mode_label.position = Vector2(16, 6)
@@ -556,10 +563,8 @@ func _build_ui4() -> void:
 	corner_layer.layer = 5
 	add_child(corner_layer)
 	_four_frames = []
-	var corners := {1: Vector2(24, 60), 3: Vector2(1280 - 24 - 240, 60), 0: Vector2(24, 720 - 16 - 66), 2: Vector2(1280 - 24 - 240, 720 - 16 - 66)}
-	var id_order := {1: 1, 0: 2, 2: 3, 3: 4}  # 四方 id(黑1 红2 绿3 蓝4)
 	for side in [1, 0, 2, 3]:
-		var pos: Vector2 = corners[side]
+		var pos: Vector2 = FOUR_CORNERS[side]
 		var info: Dictionary = Global.lobby_players.get(side, {})
 		var nm_text: String = info.get("name", SIDE_NAMES4[side])
 		var frame := _make_badge_frame(pos)
@@ -582,21 +587,13 @@ func _build_ui4() -> void:
 		idlab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		corner_layer.add_child(idlab)
 		_four_frames.append({"frame": frame, "side": side})
-	# 按半场位置:上(黑)左上、下(红)左下、左(绿)右上、右(蓝)右下
-	var positions := {1: Vector2(20, 90), 0: Vector2(20, 430), 2: Vector2(1030, 90), 3: Vector2(1030, 430)}
-	for side in [1, 0, 2, 3]:
-		var p := FloatingPanel.new()
-		p.position = positions[side]
-		p.size = Vector2(230, 280)
-		# 悬浮窗标题:玩家名+技能(无大厅数据时用方位名)
-		var owner_name: String = ""
-		if Global.lobby_players.has(side):
-			owner_name = Global.lobby_players[side].get("name", "")
-		if owner_name.is_empty():
-			owner_name = SIDE_NAMES4[side]
-		p.setup(owner_name + "技能", _font())
-		ui.add_child(p)
-		_four_perk_boxes.append(_make_scroll_list(p))
+	# 技能卡列:放在各玩家头像下方(上方角落)/上方(下方角落),鼠标悬浮放大+3D 偏转
+	for i in [1, 0, 2, 3]:
+		var box := VBoxContainer.new()
+		box.add_theme_constant_override("separation", 6)
+		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		corner_layer.add_child(box)
+		_four_perk_boxes.append(box)
 	_refresh_perk_panels4()
 	# 对局记录中心悬浮窗 + 下方按钮
 	_build_record_panel()
@@ -610,7 +607,7 @@ func _build_ui4() -> void:
 
 
 func _refresh_perk_panels4() -> void:
-	# 四方技能面板:显示当前方真实技能卡(可点击释放)
+	# 四方技能卡列:显示当前方真实技能卡(可点击释放),放在各玩家头像旁
 	var sides := [1, 0, 2, 3]  # 与 _build_ui4 面板顺序一致(上黑/下红/左绿/右蓝)
 	for i in _four_perk_boxes.size():
 		if _four_perk_boxes[i] == null:
@@ -621,40 +618,53 @@ func _refresh_perk_panels4() -> void:
 			child.queue_free()
 		var side: int = sides[i]
 		if perks4[side].is_empty():
-			var l := _make_label("无技能", 13, Color(0.6, 0.58, 0.54))
+			var l := _make_label("无技能", 12, Color(0.6, 0.58, 0.54))
 			box.add_child(l)
-			continue
-		for id in perks4[side]:
-			# 跳过内部标记键(正义逆位的炮隔子标记不是真实技能)
-			if str(id).begins_with("_"):
-				continue
-			var info: Dictionary = perks_data[id]
-			var tip: String = info.get("tip", "")
-			# 充能进度:皇后/死亡用充能值(逆位力量可累计至3倍上限),星星逆位显示蓄势,主动技能显示剩余冷却
-			var prog := ""
-			if id == "huanghou":
-				var qcap4 := 3 if perks4[side].has("liliang2") else 1
-				prog = "充能 %d/%d" % [queen_charge4[side], qcap4]
-			elif id == "siwang":
-				var scap4 := 9 if perks4[side].has("liliang2") else 3
-				prog = "充能 %d/%d" % [siwang_charge4[side], scap4]
-			elif id == "lianren2":
-				prog = "充能 %d/2" % lianren2_charge4[side]
-			elif id == "xingxing2":
-				prog = "蓄势 %d" % star2_charge4.get(side, 0)
-			if _is_active_skill(id) and prog.is_empty():
-				var cd_left4: int = int(skill_cd4.get(side, {}).get(id, 0))
-				if cd_left4 > 0:
-					prog = "冷却 %d" % cd_left4
-			if not prog.is_empty():
-				tip += "  [%s]" % prog
-			var card := PerkCard.new()
-			card.setup(id, side, info["name"], tip, info["desc"], _font(), true, 200.0, _tip)
-			# 四人:技能卡边框用该方玩家颜色
-			card.bg_tint = _side_color(side)
-			card._refresh_style(true, 200.0)
-			card.clicked.connect(_on_perk_clicked4)
-			box.add_child(card)
+		else:
+			for id in perks4[side]:
+				# 跳过内部标记键(正义逆位的炮隔子标记不是真实技能)
+				if str(id).begins_with("_"):
+					continue
+				var info: Dictionary = perks_data[id]
+				var tip: String = info.get("tip", "")
+				# 充能进度:皇后/死亡用充能值(逆位力量可累计至3倍上限),星星逆位显示蓄势,主动技能显示剩余冷却
+				var prog := ""
+				if id == "huanghou":
+					var qcap4 := 3 if perks4[side].has("liliang2") else 1
+					prog = "充能 %d/%d" % [queen_charge4[side], qcap4]
+				elif id == "siwang":
+					var scap4 := 9 if perks4[side].has("liliang2") else 3
+					prog = "充能 %d/%d" % [siwang_charge4[side], scap4]
+				elif id == "lianren2":
+					prog = "充能 %d/2" % lianren2_charge4[side]
+				elif id == "xingxing2":
+					prog = "蓄势 %d" % star2_charge4.get(side, 0)
+				if _is_active_skill(id) and prog.is_empty():
+					var cd_left4: int = int(skill_cd4.get(side, {}).get(id, 0))
+					if cd_left4 > 0:
+						prog = "冷却 %d" % cd_left4
+				if not prog.is_empty():
+					tip += "  [%s]" % prog
+				var card := PerkCard.new()
+				card.setup(id, side, info["name"], tip, info["desc"], _font(), true, FOUR_CARD_W, _tip)
+				# 四人:技能卡边框用该方玩家颜色
+				card.bg_tint = _side_color(side)
+				card._refresh_style(true, FOUR_CARD_W)
+				card.clicked.connect(_on_perk_clicked4)
+				box.add_child(card)
+		_position_four_box(box, side)
+
+
+# 按角落定位四人技能卡列(上方角落卡列在头像下方,下方角落卡列在头像上方)
+func _position_four_box(box: VBoxContainer, side: int) -> void:
+	if not FOUR_CORNERS.has(side):
+		return
+	var corner: Vector2 = FOUR_CORNERS[side]
+	var h := box.get_combined_minimum_size().y
+	if FOUR_CARD_ABOVE[side]:
+		box.position = Vector2(corner.x, corner.y - 6.0 - h)
+	else:
+		box.position = Vector2(corner.x, corner.y + 58.0)
 
 
 func _on_perk_clicked4(perk_id: String, side: int) -> void:
@@ -3088,9 +3098,9 @@ func _update_draft_ui() -> void:
 			var info: Dictionary = perks_data[id]
 			var card := PerkCard.new()
 			var is_sel: bool = id in picked
-			card.setup(id, cur_side, info["name"], info.get("tip", ""), info["desc"], _font(), true, 160.0, _tip)
-			card.position = Vector2(288 + (i % 4) * 176, 150 + (i / 4) * 262)
-			card.size = Tarot.card_size(160.0)
+			card.setup(id, cur_side, info["name"], info.get("tip", ""), info["desc"], _font(), true, 110.0, _tip)
+			card.position = Vector2(399 + (i % 4) * 124, 150 + (i / 4) * 187)
+			card.size = Tarot.card_size(110.0)
 			card.set_selected(is_sel)
 			card.clicked.connect(func(pid: String, _s: int):
 				if pid in _draft_selected4:
@@ -3104,7 +3114,7 @@ func _update_draft_ui() -> void:
 			)
 			draft_root.add_child(card)
 		# 确认按钮
-		var confirm := _make_button("确认选择", Vector2(1280 / 2 - 120, 150 + 2 * 262 + 20), Vector2(240, 40))
+		var confirm := _make_button("确认选择", Vector2(1280 / 2 - 120, 150 + 2 * 187 + 20), Vector2(240, 40))
 		confirm.pressed.connect(_confirm_draft4)
 		draft_root.add_child(confirm)
 		var hint := _make_label("点击技能卡选中/取消,选满 3 个后点确认", 16, Color(0.85, 0.82, 0.75))
