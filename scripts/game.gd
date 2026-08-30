@@ -1966,6 +1966,21 @@ func _try_exec_command(text: String) -> bool:
 			queue_redraw()
 			_broadcast_state() if net_role == "host" else null
 			return true
+		"/skip":
+			if phase != Phase.PLAY:
+				_show_command_result("对局未进行中")
+				return true
+			if net_role != "local" and Global.from_lobby:
+				if net_role == "host":
+					_skip_current_turn()
+					_broadcast_state()
+				else:
+					request_skip.rpc_id(1)
+					_show_command_result("已发送跳过申请")
+				return true
+			_skip_current_turn()
+			_show_command_result("已跳过当前回合")
+			return true
 		_:
 			_show_command_result("未知指令: %s" % cmd)
 			return true
@@ -2512,6 +2527,23 @@ func _consume_turn_after_skill() -> void:
 	if actions_left > 0:
 		actions_left = 0
 		_end_turn()
+
+
+# /skip:跳过当前回合(不落子)
+func _skip_current_turn() -> void:
+	if four_mode:
+		_consume_turn_after_skill4()
+	else:
+		_consume_turn_after_skill()
+
+
+# 客户端 → 主机:请求跳过当前回合(调试指令)
+@rpc("any_peer", "reliable", "call_local")
+func request_skip() -> void:
+	if net_role != "host":
+		return
+	_skip_current_turn()
+	_broadcast_state()
 
 
 # 主机执行客户端请求的技能(黑方),带目标参数
