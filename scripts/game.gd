@@ -211,6 +211,7 @@ var net_wait_label: Label
 var chat: Panel  # 对局聊天栏
 var _tip: Control  # 塔罗牌技能信息悬浮提示(共享)
 var _tip_is_piece := false    # 当前 tooltip 是否显示棋子状态
+var _spectator := false       # 观战席:无固定方,只收状态,不操作
 var _piece_last_key := ""     # 上次棋子状态内容(避免每帧重建)
 var record_panel: Panel  # 对局记录中心悬浮窗
 var record_btn: Button  # 屏幕下方对局记录按钮
@@ -262,6 +263,8 @@ func _ready() -> void:
 				my_side4 = _find_my_side4()
 				if my_side4 >= 0:
 					own_side = my_side4
+				else:
+					_spectator = true  # 观战席:无固定方
 				if net_role == "host":
 					_build_four_side_map()
 				# 本机视角旋转:自己的半场朝下(红不转/黑180°/绿90°CW/蓝270°CW)
@@ -308,6 +311,14 @@ func _ready() -> void:
 			_show_skill_draft4()
 			if _has_user_arg("--auto"):
 				call_deferred("_auto_pick_four")
+		# 观战席:该客户端在大厅选了观战——无固定方,只观看(状态由主机广播)
+		if Global.spectators.has(multiplayer.get_unique_id()):
+			_spectator = true
+			var sp_txt := _make_label("观战中(仅观看)", 24, Color(0.6, 0.75, 1.0))
+			sp_txt.position = Vector2(0, 150)
+			sp_txt.size = Vector2(1280, 60)
+			sp_txt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			ui.add_child(sp_txt)
 		return
 	if net_role == "local":
 		if Global.demo_perk != "":
@@ -5514,6 +5525,8 @@ func _done_targeting() -> void:
 # ==================== 交互 ====================
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _spectator:
+		return  # 观战席:只观看,不操作
 	if four_mode:
 		_handle_input4(event)
 		return

@@ -9,6 +9,7 @@ const CustomOptions := preload("res://scripts/custom_options.gd")
 const COLORS16 := Global.COLORS16
 
 var players := {}      # peer_id -> {name, avatar_data, color}
+var spectators := {}   # peer_id -> {name, avatar_data} 观战席(不占用下棋席位)
 var my_peer := 1
 var lobby_label: Label
 var players_box: VBoxContainer
@@ -114,6 +115,10 @@ func _ready() -> void:
 		Global.change_scene_with_fade("res://scenes/main.tscn")
 	)
 	add_child(back)
+	# 观战席:不占下棋席位,只能观看
+	var spectate_btn := _make_button("观战席", Vector2(540, 572), Vector2(200, 44))
+	spectate_btn.pressed.connect(_request_spectate)
+	add_child(spectate_btn)
 
 	# 聊天面板(左下角,可拖动/折叠)
 	chat = ChatPanel.new()
@@ -197,6 +202,27 @@ func _on_connected() -> void:
 	send_profile.rpc_id(1, prof.get("username", "玩家"), prof)
 
 
+# 加入方点击"观战席":上报主机,加入观战名单(不占对局席位)
+func _request_spectate() -> void:
+	if Global.net_role == "host":
+		return  # 房主为玩家,不能观战
+	var prof := Profile.to_net_data()
+	var nm: String = prof.get("username", "玩家")
+	send_spectate.rpc_id(1, nm, prof)
+
+
+@rpc("any_peer", "reliable")
+func send_spectate(name: String, avatar_data: Dictionary) -> void:
+	if not multiplayer.is_server():
+		return
+	var pid := multiplayer.get_remote_sender_id()
+	# 已在玩家席位的不再重复;观战者不占席位
+	players.erase(pid)
+	spectators[pid] = {"name": name, "avatar_data": avatar_data}
+	_update_ui()
+	_sync_players.rpc(_players_to_data())
+
+
 @rpc("any_peer", "reliable")
 func send_profile(name: String, avatar_data: Dictionary) -> void:
 	if not multiplayer.is_server():
@@ -244,6 +270,7 @@ func _on_peer_connected(pid: int) -> void:
 
 func _on_peer_disconnected(pid: int) -> void:
 	players.erase(pid)
+	spectators.erase(pid)
 	_update_ui()
 
 
@@ -257,12 +284,21 @@ func _players_to_data() -> Dictionary:
 			"ready": bool(players[pid].get("ready", false)),
 			"join_order": int(players[pid].get("join_order", 0)),
 		}
+	var sp := {}
+	for spid in spectators:
+		sp[str(spid)] = {"name": spectators[spid]["name"]}
+	data["__spectators"] = sp
 	return data
 
 
 func _apply_players(data: Dictionary) -> void:
 	players = {}
+	spectators = {}
 	for pid in data:
+		if pid == "__spectators":
+			for spid in data[pid]:
+				spectators[int(spid)] = {"name": data[pid][spid]["name"], "avatar_data": {}}
+			continue
 		var p: Dictionary = data[pid]
 		players[int(pid)] = {"name": p["name"], "avatar_data": p["avatar"], "color": int(p["color"]), "ready": bool(p.get("ready", false)), "join_order": int(p.get("join_order", 0))}
 		if int(pid) == my_peer:
@@ -414,6 +450,16 @@ func _update_ui() -> void:
 	for pid in order:
 		var p: Dictionary = players[pid]
 		players_box.add_child(_player_row(pid, p))
+	# 观战席
+	if not spectators.is_empty():
+		var sp_label := _make_label("观战席:", 15, Color(0.6, 0.75, 1.0))
+		players_box.add_child(sp_label)
+		var sp_order: Array = spectators.keys()
+		sp_order.sort()
+		for spid in sp_order:
+			var sp: Dictionary = spectators[spid]
+			var row := _make_label("👁 %s" % sp["name"], 15, Color(0.62, 0.68, 0.78))
+			players_box.add_child(row)
 	_update_room_count()
 	# 颜色板禁用已被选的
 	if color_box != null:
@@ -560,17 +606,21 @@ func _start_game() -> void:
 				"is_ai": true,
 			}
 	Global.from_lobby = true
-	start_game.rpc(Global.player_colors, Global.game_mode, Global.standard_mode, lobby_players, Global.game_rules)
+	Global.spectators = {}
+	for spid in spectators:
+		Global.spectators[spid] = {"name": spectators[spid]["name"], "avatar_data": {}}
+	start_game.rpc(Global.player_colors, Global.game_mode, Global.standard_mode, lobby_players, Global.game_rules, Global.spectators)
 
 
 @rpc("authority", "call_local", "reliable")
-func start_game(colors: Dictionary, mode: String, standard: bool, lobby_players: Dictionary = {}, game_rules: Dictionary = {}) -> void:
+func start_game(colors: Dictionary, mode: String, standard: bool, lobby_players: Dictionary = {}, game_rules: Dictionary = {}, spectators: Dictionary = {}) -> void:
 	Global.from_lobby = true
 	Global.player_colors = colors
 	# 加入方必须同步房间模式(四人/标准),否则会按双人 pvp 逻辑等待 assign_perks 卡死
 	Global.game_mode = mode
 	Global.standard_mode = standard
 	Global.lobby_players = lobby_players
+	Global.spectators = spectators
 	# 同步自定义规则(占领点/击杀目标等),加入端与主机一致
 	if not game_rules.is_empty():
 		Global.game_rules = game_rules

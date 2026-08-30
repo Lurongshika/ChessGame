@@ -12,6 +12,7 @@ var demo_perk := ""         # 技能图鉴:当前演示的技能 id(非空时进
 var my_color := -1          # 大厅:己方选的棋子颜色索引(0-15)
 var player_colors := {}     # 对局:side -> 棋子颜色索引(大厅分配)
 var lobby_players := {}     # 对局:side -> {name, avatar_data, color} 四方玩家信息(大厅传入)
+var spectators := {}       # 对局:pseudo_id -> {name, avatar_data} 观战席(不占席位,只观看)
 var game_rules := {}        # 自定义对局规则(大厅选项): win_mode/king_down/promotion/kill_count
 var from_lobby := false     # 是否从等候大厅进入对局(复用大厅连接)
 var reconnect_mode := false # 断线重连:客户端直接进 game 场景重连(跳过 Lobby,避免跨场景 RPC 路径错误)
