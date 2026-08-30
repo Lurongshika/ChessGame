@@ -1639,7 +1639,7 @@ func _build_list() -> void:
 		var card := TarotCard.new()
 		card.setup(id, 0, info["name"], info.get("tip", ""), _full_desc(id), _font(), true, 100.0, _tip)
 		card.set_meta("skill_id", id)
-		card.clicked.connect(func(sid: String = id): _select_skill(sid))
+		card.clicked.connect(func(_sid: String, _s: int): _select_skill(_sid))
 		grid.add_child(card)
 
 
