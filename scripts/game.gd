@@ -4565,7 +4565,8 @@ func _show_skill_announce(perk_id: String, side: int) -> void:
 func _burst_particles(pos: Vector2) -> void:
 	if not is_instance_valid(self):
 		return
-	# 同时喷发多种颜色的粒子(每色一群,同时出现不同颜色);大小不一、无重力、四周飘散、速度渐降、半透明、量大
+	# 同时喷发多种颜色的粒子(每色一群,同时出现不同颜色);大小不一、无重力、四周飘散、速度渐降、半透明、量大、发光
+	var glow := _make_glow_tex()
 	var colors := [
 		Color(1.0, 0.25, 0.25), Color(1.0, 0.62, 0.2), Color(1.0, 1.0, 0.3),
 		Color(0.3, 1.0, 0.45), Color(0.3, 0.65, 1.0), Color(0.7, 0.3, 1.0),
@@ -4586,14 +4587,34 @@ func _burst_particles(pos: Vector2) -> void:
 		p.initial_velocity_min = 130.0
 		p.initial_velocity_max = 360.0
 		p.scale_amount_min = 1.0
-		p.scale_amount_max = 12.0  # 大小不一
+		p.scale_amount_max = 4.0  # 大小不一
+		p.texture = glow           # 发光粒子(径向光晕)
 		var c: Color = colors[ci]
-		p.color = Color(c.r, c.g, c.b, 0.55)  # 半透明
+		p.color = Color(c.r, c.g, c.b, 0.6)  # 半透明
 		add_child(p)
 		get_tree().create_timer(1.6).timeout.connect(func():
 			if is_instance_valid(p):
 				p.queue_free()
 		)
+
+
+# 径向光晕粒子纹理(白色中心→透明边缘,让粒子发光)
+static var _glow_tex: Texture2D
+static func _make_glow_tex() -> Texture2D:
+	if _glow_tex != null:
+		return _glow_tex
+	var g := GradientTexture2D.new()
+	g.width = 16
+	g.height = 16
+	g.fill = GradientTexture2D.FILL_RADIAL
+	g.fill_from = Vector2(0.5, 0.5)
+	g.fill_to = Vector2(0.5, 0.0)
+	var gr := Gradient.new()
+	gr.set_color(0, Color(1, 1, 1, 1.0))
+	gr.set_color(1, Color(1, 1, 1, 0.0))
+	g.gradient = gr
+	_glow_tex = g
+	return g
 
 
 func _activate_skill(perk_id: String, side: int) -> void:

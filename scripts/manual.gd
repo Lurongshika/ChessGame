@@ -1602,10 +1602,17 @@ func _ready() -> void:
 	info_tip.size = Vector2(270, 26)
 	add_child(info_tip)
 
+	# 描述放进固定宽容器强制换行(直接 set size 会被文本最小宽度撑开不换行)
+	var desc_box := VBoxContainer.new()
+	desc_box.position = Vector2(750, 196)
+	desc_box.custom_minimum_size = Vector2(270, 0)
+	desc_box.size = Vector2(270, 210)
+	desc_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(desc_box)
 	info_desc = _make_label("", 15, Color(0.9, 0.88, 0.82))
-	info_desc.position = Vector2(750, 196)
-	info_desc.size = Vector2(270, 200)
-	add_child(info_desc)
+	info_desc.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	info_desc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	desc_box.add_child(info_desc)
 
 	# 最右侧:进入模拟对局(始终显示)
 	var right_btn := _make_button("进入模拟对局", Vector2(1060, 320), Vector2(180, 56))

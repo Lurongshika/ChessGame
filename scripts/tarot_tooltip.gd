@@ -58,14 +58,22 @@ func show_for(perk_id: String, name: String, tip: String, desc: String) -> void:
 	add_child(tp)
 
 	var d := _label(desc, 11, Color(0.9, 0.88, 0.82))
-	d.position = Vector2(tx, 56)
-	d.size = Vector2(tw, 130)
 	d.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 	d.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	add_child(d)
+	d.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# 描述放入固定宽容器,强制按宽度换行(直接设 size 会被文本最小宽度撑开不换行)
+	var dv := VBoxContainer.new()
+	dv.position = Vector2(tx, 56)
+	dv.custom_minimum_size = Vector2(tw, 0)
+	dv.size = Vector2(tw, 0)
+	dv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(dv)
+	dv.add_child(d)
+	var desc_h := _font.get_multiline_string_size(desc, HORIZONTAL_ALIGNMENT_LEFT, tw, 11).y
+	dv.size.y = maxf(desc_h, 20.0)
 
 	# 面板高度:牌面小图高度与文字区取大者
-	size = Vector2(W, maxf(Tarot.card_size(THUMB).y + PAD * 2, 56 + 130 + PAD))
+	size = Vector2(W, maxf(Tarot.card_size(THUMB).y + PAD * 2, 56 + dv.size.y + PAD))
 	visible = true
 	queue_redraw()
 
