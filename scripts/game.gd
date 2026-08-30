@@ -73,6 +73,7 @@ var death2_poison_caster := -1
 var lianren2_charge := {0: 0, 1: 0}  # 恋人逆位:被吃充能(需求2,使用后其他技能完成冷却/充能)
 var sync_pieces: Array = []     # 命运之轮(进阶):协同棋子(移动不消耗步数,每子每回合一次)
 var _sync_moved: Array[Vector2i] = []  # 命运之轮(进阶):本回合已免费移动过的协同棋子(防无限移动)
+var _turn_moved: Array[Vector2i] = []  # 本回合已移动过的子(技能可移多子,但同一子每回合只能动一次)
 var star2_charge := {0: 0, 1: 0}  # 星星逆位:蓄势(每蓄势可免费移动一个兵)
 var controlled_turns := 0       # 倒吊人:控制权剩余回合数
 var controlled_all_turns := 0   # 倒吊人逆位:全棋子控制剩余回合数(释放后跳过本回合,下回合起生效)
@@ -119,6 +120,7 @@ var lianren2_charge4 := {0: 0, 1: 0, 2: 0, 3: 0}  # 四人:恋人逆位被吃充
 var star2_charge4 := {0: 0, 1: 0, 2: 0, 3: 0}  # 四人:星星逆位蓄势
 var sync_pieces4: Array = []
 var _sync_moved4: Array[Vector2i] = []  # 四人:协同棋子本回合已免费移动(每回合一次,防无限移动)
+var _turn_moved4: Array[Vector2i] = []  # 四人:本回合已移动过的子(同一子每回合一次)
 var controlled_turns4 := 0
 var controlled_all_turns4 := 0   # 四人:倒吊人逆位全棋子控制剩余回合数
 var controlled_all_owner4 := -1  # 四人:全棋子控制权归属方
@@ -2892,6 +2894,9 @@ func _validate_move(from: Vector2i, to: Vector2i, kind: String, side: int, skip_
 	var p = board[from.y][from.x]
 	if p == null or side != turn:
 		return false
+	# 同一子本回合已移动过,不能再动(技能可移多子,但同一子每回合一次)
+	if from in _turn_moved:
+		return false
 	# 倒吊人逆位:全棋子控制期可移动对方任意棋子(每子每回合一次)
 	var all_control: bool = controlled_all_turns > 0 and controlled_all_owner == turn
 	var is_controlled: bool = (not controlled_piece.is_empty() and from == controlled_piece.get("pos", Vector2i(-1, -1)) and controlled_piece.get("owner", -1) == turn) or (all_control and p["side"] != side)
@@ -3525,6 +3530,7 @@ func _begin_turn() -> void:
 	# 注:隐者隐身/皇后无敌/皇帝无敌/皇后逆位反制等"持续一回合"效果,改为己方移动后清除(见 _perform_move)
 	sync_pieces = []
 	_sync_moved = []
+	_turn_moved = []
 	# 倒吊人逆位:全控制回合递减(在控制方回合开始减,生效 3 个己方回合)
 	if controlled_all_turns > 0 and controlled_all_owner == turn:
 		controlled_all_turns -= 1
@@ -3736,6 +3742,7 @@ func _perform_move(from: Vector2i, to: Vector2i) -> void:
 	_record_move(from, to, "move")
 	var _moving_piece: Dictionary = board[from.y][from.x]
 	var mover_side: int = _moving_piece["side"]
+	_turn_moved.append(to)  # 本回合已动过的子,同一子每回合一次
 	var res := R.apply_move(board, from, to)
 	board = res["board"]
 	var captured = res["captured"]
@@ -3956,6 +3963,7 @@ func _birth_pos(side: int, type: int) -> Vector2i:
 func _perform_free_retreat(from: Vector2i, to: Vector2i) -> void:
 	# 星星:兵无代价移动一格,不消耗行动次数
 	_record_move(from, to, "free_retreat")
+	_turn_moved.append(to)
 	var p = board[from.y][from.x]
 	board[from.y][from.x] = null
 	board[to.y][to.x] = p
@@ -3975,6 +3983,7 @@ func _perform_free_retreat(from: Vector2i, to: Vector2i) -> void:
 func _perform_free_elephant(from: Vector2i, to: Vector2i) -> void:
 	# 月亮逆位:象无代价移动到空格,不消耗行动次数,不结束回合
 	_record_move(from, to, "free_elephant")
+	_turn_moved.append(to)
 	var p = board[from.y][from.x]
 	board[from.y][from.x] = null
 	board[to.y][to.x] = p
@@ -5566,6 +5575,9 @@ func _select(pos: Vector2i) -> void:
 	# 协同棋子:本回合已免费移动过一次的不能再移动(防无限移动)
 	if pos in _sync_moved:
 		return
+	# 本回合已动过的子:技能可移多子,但同一子每回合只能动一次
+	if pos in _turn_moved:
+		return
 	selected = pos
 	moves_cache = R.legal_moves(board, pos, perks_red, perks_black)
 	# 隐者:隐身的子不能吃子(只能移动)
@@ -6245,6 +6257,9 @@ func _select4(pos: Vector2i) -> void:
 	# 协同棋子:本回合已免费移动过一次的不能再移动(防无限移动)
 	if pos in _sync_moved4:
 		return
+	# 本回合已动过的子:同一子每回合只能动一次
+	if pos in _turn_moved4:
+		return
 	# 走法复用 chess_rules.raw_moves4(参数化支持 4 方方向/九宫/河界 + 技能)
 	selected4 = pos
 	var perks_arr: Array = [perks4[0], perks4[1], perks4[2], perks4[3]]
@@ -6415,6 +6430,9 @@ func _move4_rejected(from: Vector2i, to: Vector2i, side: int) -> bool:
 	var mover = board[from.y][from.x]
 	if mover == null:
 		return true
+	# 同一子本回合已移动过,不能再动
+	if from in _turn_moved4:
+		return true
 	# 倒吊人正位切换模式:只能操控非己方棋子;被操控的非己方棋子每子每回合限移一次
 	var cur4_side: int = current_side4()
 	var foreign4: bool = control_foreign4[cur4_side] and mover["side"] != cur4_side
@@ -6466,6 +6484,7 @@ func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 	var side: int = mover["side"]
 	if _move4_rejected(from, to, side):
 		return
+	_turn_moved4.append(to)  # 本回合已动过的子,同一子每回合一次
 	var captured = board[to.y][to.x]
 	board[to.y][to.x] = mover
 	board[from.y][from.x] = null
@@ -6922,6 +6941,7 @@ func _begin_turn4() -> void:
 	# 注:隐者隐身/皇后无敌/皇帝无敌/皇后逆位反制等"持续一回合"效果,改为己方移动后清除(见 _move4)
 	sync_pieces4 = []
 	_sync_moved4 = []
+	_turn_moved4 = []
 	hermit_active4 = hermit_pending4
 	hermit_pending4 = false
 	# 倒吊人逆位:全控制回合递减(在控制方回合开始减)
