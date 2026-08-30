@@ -3064,6 +3064,14 @@ func _pawn_line4(side: int) -> int:
 	return 3 if side == 1 else (13 if side == 0 else 3)
 
 
+# 选牌界面:按在行内的列位置计算两端外倾角(左端负、右端正、中间 0)——扇形展开
+func _fan_angle(col: int, total: int) -> float:
+	if total <= 1:
+		return 0.0
+	var norm := float(col) / float(total - 1)
+	return (norm - 0.5) * 2.0 * 13.0
+
+
 func _update_draft_ui() -> void:
 	if draft_root != null:
 		# queue_free 延迟释放,避免在技能卡点击信号回调中立即 free 导致崩溃
@@ -3102,6 +3110,7 @@ func _update_draft_ui() -> void:
 			var is_sel: bool = id in picked
 			card.setup(id, cur_side, info["name"], info.get("tip", ""), info["desc"], _font(), true, 110.0, _tip)
 			card.idle_float = true
+			card.set_fan(_fan_angle(i % 4, 4))
 			card.position = Vector2(399 + (i % 4) * 124, 150 + (i / 4) * 187)
 			card.size = Tarot.card_size(110.0)
 			card.set_selected(is_sel)
@@ -3143,6 +3152,7 @@ func _update_draft_ui() -> void:
 		var card := PerkCard.new()
 		card.setup(id, cur_side, info["name"], info.get("tip", ""), info["desc"], _font(), true, 190.0, _tip)
 		card.idle_float = true
+		card.set_fan(_fan_angle(i, 3))
 		card.position = Vector2(339 + i * 202, 180)
 		card.size = Tarot.card_size(190.0)
 		card.clicked.connect(func(pid: String, _s: int):

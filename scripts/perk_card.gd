@@ -13,11 +13,13 @@ const MAX_TILT := 11.0        # 悬浮偏转最大角度(度,限制为原一半)
 const IDLE_SWAY := 6.0        # 选牌界面所有卡牌基础倾斜摆动(度)
 const IDLE_BOB := 5.0         # 选牌界面所有卡牌基础上下漂浮(像素)
 const SEL_LIFT := 8.0         # 选中额外上浮(像素)
+const FAN_ANGLE := 13.0       # 选牌界面两端卡牌外倾角度(度,中间为 0)
 
 var perk_id := ""
 var _side := -1
 var selected := false
 var idle_float := false       # 选牌界面:所有卡牌持续飘动(摆动+漂浮),选中再叠 shader
+var _fan := 0.0               # 外倾角(度,按所在列位置设置:左端负、右端正、中间 0)
 var bg_tint := Color(-1, -1, -1)  # 自定义边框色(四人模式玩家色,-1 表示用默认)
 var _tooltip: Control              # 共享悬浮提示(可空)
 var _title := ""
@@ -118,6 +120,7 @@ func _process(delta: float) -> void:
 
 	pivot_offset = size / 2.0
 	scale = Vector2(_curr_scale, _curr_scale)
+	rotation_degrees = lerpf(rotation_degrees, _fan, k)  # 两端卡牌外倾(扇形展开)
 
 	# 上下漂浮:选牌界面所有卡牌上飘摆动;选中额外上浮(初始槽位为基准)
 	if not _base_captured and size != Vector2.ZERO:
@@ -172,6 +175,11 @@ func set_selected(v: bool) -> void:
 	if _mat != null:
 		_mat.set_shader_parameter("selected", 1.0 if v else 0.0)
 	_refresh_style(true, 0.0)
+
+
+# 设置外倾角(度):左端传负、右端传正、中间传 0,形成扇形展开
+func set_fan(deg: float) -> void:
+	_fan = deg
 
 
 # 边框样式:bg_tint 玩家色;默认深色底 + 细边框(选中态由 shader 描边表现)
