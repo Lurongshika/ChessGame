@@ -734,7 +734,12 @@ func _on_perk_clicked4(perk_id: String, side: int) -> void:
 		return
 	if net_role != "local" and Global.from_lobby:
 		if net_role == "host":
-			_execute_skill4(perk_id, side, {})
+			# 目标型技能:进入选目标流程(主机自身也要选目标);非目标型立即执行
+			if _is_targeting_skill(perk_id):
+				_activate_skill4(perk_id, side)
+				targeting4["net"] = true
+			else:
+				_execute_skill4(perk_id, side, {})
 			_broadcast_state4()
 		else:
 			# 目标型技能:本地选目标后上报);非目标型直接请求
@@ -7471,6 +7476,31 @@ func _execute_skill4(perk_id: String, side: int, params: Dictionary) -> void:
 				_consume_turn_after_skill4()
 				queue_redraw()
 				return
+	# 魔术师:交换两子(a/b 参数,主机权威校验)
+	if (perk_id == "moshushi" or perk_id == "moshushi2") and params.has("a") and params.has("b"):
+		var mwa := Vector2i(int(params["a"][0]), int(params["a"][1]))
+		var mwb := Vector2i(int(params["b"][0]), int(params["b"][1]))
+		var mpa = board[mwa.y][mwa.x]
+		var mpb = board[mwb.y][mwb.x]
+		if mpa == null or mpb == null or mwa == mwb:
+			return
+		if perk_id == "moshushi":
+			if mpa["side"] != side or mpb["side"] != side:
+				return
+		else:  # moshushi2: 交换其他方的两子(同侧,不能是将/帅)
+			if mpa["side"] == side or mpb["side"] == side or mpa["side"] != mpb["side"]:
+				return
+			if mpa["type"] == R.Type.KING or mpb["type"] == R.Type.KING:
+				return
+		board[mwa.y][mwa.x] = mpb
+		board[mwb.y][mwb.x] = mpa
+		_apply_skill_cd4(perk_id, side)
+		_record_skill4(side, perk_id)
+		notify_skill_used4.rpc(perk_id, side)
+		_show_status4("魔术师:两子位置已交换")
+		_consume_turn_after_skill4()
+		queue_redraw()
+		return
 	# 隐者(普通):指定两子隐身两回合(a/b 参数)
 	if perk_id == "yinzhe" and params.has("a") and params.has("b"):
 		var ha := Vector2i(int(params["a"][0]), int(params["a"][1]))
