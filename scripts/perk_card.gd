@@ -82,6 +82,9 @@ func _process(delta: float) -> void:
 	if _mat == null:
 		return
 	_mat.set_shader_parameter("rect_size", size)
+	# 未布局(重建中/未放进容器)时不动变换,避免对局动画期间玩家卡牌"缩小/跳位"闪动
+	if size == Vector2.ZERO:
+		return
 	var t := Time.get_ticks_msec() / 1000.0
 	_mat.set_shader_parameter("time", t)
 

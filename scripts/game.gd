@@ -66,6 +66,9 @@ var invincible_piece_side := -1    # 皇帝:无敌棋子所属方(用于"己方�
 var invincible_piece_turns := 0    # 皇帝:无敌剩余回合数(移动后递减)
 var counter_side := -1          # 皇后(进阶):反制方(该方棋子被吃时同归于尽)
 var siwang_charge := {0: 0, 1: 0}  # 死亡:被吃充能(己方每被吃 1 子 +1)
+var poison_map := {}              # 中毒:pos -> 剩余回合(到期自动摧毁;移动解毒)
+var death2_poison_active := false  # 死亡逆位:下回合移动的非己方子中毒
+var death2_poison_caster := -1
 var lianren2_charge := {0: 0, 1: 0}  # 恋人逆位:被吃充能(需求2,使用后其他技能完成冷却/充能)
 var sync_pieces: Array = []     # 命运之轮(进阶):协同棋子(移动不消耗步数,每子每回合一次)
 var _sync_moved: Array[Vector2i] = []  # 命运之轮(进阶):本回合已免费移动过的协同棋子(防无限移动)
@@ -107,6 +110,9 @@ var invincible_piece_side4 := -1  # 四人:皇帝无敌棋子所属方(用于"�
 var invincible_piece_turns4 := 0  # 四人:皇帝无敌剩余回合数
 var counter_side4 := -1
 var siwang_charge4 := {0: 0, 1: 0, 2: 0, 3: 0}
+var poison_map4 := {}              # 四人:pos -> 剩余回合(到期摧毁,移动解毒)
+var death2_poison_active4 := false  # 四人:死亡逆位下回合移动中毒
+var death2_poison_caster4 := -1
 var lianren2_charge4 := {0: 0, 1: 0, 2: 0, 3: 0}  # 四人:恋人逆位被吃充能(需求2)
 var star2_charge4 := {0: 0, 1: 0, 2: 0, 3: 0}  # 四人:星星逆位蓄势
 var sync_pieces4: Array = []
@@ -637,9 +643,9 @@ func _refresh_perk_panels4() -> void:
 				if id == "huanghou":
 					var qcap4 := 3 if perks4[side].has("liliang2") else 1
 					prog = "充能 %d/%d" % [queen_charge4[side], qcap4]
-				elif id == "siwang":
-					var scap4 := 9 if perks4[side].has("liliang2") else 3
-					prog = "充能 %d/%d" % [siwang_charge4[side], scap4]
+				elif id == "siwang" or id == "siwang2":
+					var need4 := 3 if id == "siwang" else 4
+					prog = "充能 %d/%d" % [siwang_charge4[side], need4]
 				elif id == "lianren2":
 					prog = "充能 %d/2" % lianren2_charge4[side]
 				elif id == "xingxing2":
@@ -672,8 +678,9 @@ func _skill_ready4(side: int, perk_id: String) -> bool:
 		var cap := 3 if perks4[side].has("liliang2") else 1
 		return queen_charge4[side] >= cap
 	if perk_id == "siwang":
-		var cap := 9 if perks4[side].has("liliang2") else 3
-		return siwang_charge4[side] >= cap
+		return siwang_charge4[side] >= 3
+	if perk_id == "siwang2":
+		return siwang_charge4[side] >= 4
 	if perk_id == "lianren2":
 		return lianren2_charge4[side] >= 2
 	if perk_id == "xingxing2":
@@ -699,8 +706,9 @@ func _position_four_box(box: HBoxContainer, side: int) -> void:
 func _on_perk_clicked4(perk_id: String, side: int) -> void:
 	if phase != Phase.PLAY or winner4 >= 0:
 		return
-	var cur := current_side4()
-	if side != cur:
+	# 只能用己方(本进程控制的一方)技能,不能用"当前回合方"——否则主机能在加入方回合替其用技能
+	var my := my_side4 if my_side4 >= 0 else current_side4()
+	if side != my:
 		_show_status4("只能使用己方(%s)技能" % SIDE_NAMES4[side])
 		return
 	if not _is_active_skill(perk_id):
@@ -719,8 +727,8 @@ func _on_perk_clicked4(perk_id: String, side: int) -> void:
 	if perk_id == "huanghou" and queen_charge4[side] <= 0:
 		_show_status4("[皇后] 充能中:己方每被吃 1 子充能 1 点")
 		return
-	if perk_id == "siwang" and siwang_charge4[side] <= 0:
-		_show_status4("[死亡] 充能中:己方每被吃 1 子充能 1 点")
+	if (perk_id == "siwang" and siwang_charge4[side] < 3) or (perk_id == "siwang2" and siwang_charge4[side] < 4):
+		_show_status4("[死亡] 充能中:己方每被吃 1 子 +1(需 %d 点)" % (3 if perk_id == "siwang" else 4))
 		return
 	if net_role != "local" and Global.from_lobby:
 		if net_role == "host":
@@ -852,7 +860,7 @@ func _start_targeting4(perk_id: String, side: int) -> void:
 		"zhanche", "zhanche2":
 			_show_status4("选择己方的车")
 		"siwang":
-			_show_status4("选择己方一枚棋子(摧毁敌我同类型)")
+			_show_status4("选择对方一子(使其中毒2回合,移动解毒)")
 		"diaodiao", "diaodiao2":
 			_show_status4("选择要控制的对方棋子")
 		"yinzhe":
@@ -1014,21 +1022,22 @@ func _apply_hermit_target4(a: Vector2i, b: Vector2i, side: int) -> void:
 
 func _handle_death_target4(pos: Vector2i, side: int) -> void:
 	var p = board[pos.y][pos.x]
-	if p == null or p["side"] != side:
-		_show_status4("请选择己方棋子")
+	if p == null or p["side"] == side:
+		_show_status4("请选择对方的棋子(中毒)")
 		return
-	if siwang_charge4[side] <= 0:
-		_show_status4("[死亡] 充能中:己方每被吃 1 子充能 1 点")
+	if siwang_charge4[side] < 3:
+		_show_status4("[死亡] 充能中:己方每被吃 1 子 +1(需 3 点)")
 		return
 	if net_role != "local" and Global.from_lobby and net_role == "client":
 		targeting4["data"]["target"] = pos
 		_done_targeting4()
 		return
-	siwang_charge4[side] -= 1
-	_destroy_same_type4(pos, side)
+	siwang_charge4[side] -= 3
+	poison_map4[pos] = 2  # 非己方子中毒2回合
 	_done_targeting4()
 	_show_skill_announce("siwang", side)
 	_consume_turn_after_skill4()
+	queue_redraw()
 
 
 func _destroy_same_type4(pos: Vector2i, side: int) -> void:
@@ -2533,12 +2542,12 @@ func _apply_net_skill(perk_id: String, params: Dictionary) -> void:
 		"siwang":
 			var pos := Vector2i(int(params["pos"][0]), int(params["pos"][1]))
 			var p = board[pos.y][pos.x]
-			if p == null or p["side"] != side:
+			if p == null or p["side"] == side:
 				return
-			if siwang_charge[side] <= 0:
+			if siwang_charge[side] < 3:
 				return
-			siwang_charge[side] -= 1
-			_destroy_same_type(pos, side)
+			siwang_charge[side] -= 3
+			poison_map[pos] = 2  # 非己方子中毒2回合
 			_consume_turn_after_skill()
 		"diaodiao2":
 			# 逆位:跳过本回合,下回合起获得所有对方棋子控制权三回合
@@ -3481,6 +3490,10 @@ func _begin_turn() -> void:
 	# 倒吊人正位:切换操控模式(每子每回合限移一次)
 	if control_foreign[turn]:
 		_controlled_moved = []
+	# 死亡逆位:移动中毒效果在敌方回合生效,轮到施法方便结束
+	if death2_poison_active and death2_poison_caster == turn:
+		death2_poison_active = false
+		death2_poison_caster = -1
 	# 恶魔逆位:免疫回合递减(被吃方)
 	for s in [0, 1]:
 		if emo2_turns[s] > 0:
@@ -3677,11 +3690,16 @@ func _expire_one_turn_effects(side: int) -> void:
 
 func _perform_move(from: Vector2i, to: Vector2i) -> void:
 	_record_move(from, to, "move")
-	# 移动前先取棋子引用(动画用,避免后续棋盘变化影响)
 	var _moving_piece: Dictionary = board[from.y][from.x]
+	var mover_side: int = _moving_piece["side"]
 	var res := R.apply_move(board, from, to)
 	board = res["board"]
 	var captured = res["captured"]
+	# 中毒:移动即解毒(移除旧位中毒);死亡逆位:下回合移动的非己方棋子进入中毒
+	if poison_map.has(from):
+		poison_map.erase(from)
+	if death2_poison_active and mover_side != death2_poison_caster:
+		poison_map[to] = 3
 	selected = Vector2i(-1, -1)
 	moves_cache = []
 	free_retreat_targets = []
@@ -3789,6 +3807,9 @@ func _perform_move(from: Vector2i, to: Vector2i) -> void:
 
 
 func _handle_capture(captured: Dictionary, captured_pos: Vector2i, attacker_side: int) -> void:
+	# 被吃子若中毒,标记清除(已不在)
+	if poison_map.has(captured_pos):
+		poison_map.erase(captured_pos)
 	# 记录被吃子(用于魔术师/生生不息)
 	var birth := _birth_pos(captured["side"], captured["type"])
 	captured_history.append({"side": captured["side"], "type": captured["type"], "pos": captured_pos, "birth_pos": birth})
@@ -3818,8 +3839,8 @@ func _handle_capture(captured: Dictionary, captured_pos: Vector2i, attacker_side
 	var queen_cap := 3 if perks_of(victim_side).has("liliang2") else 1
 	if perks_of(victim_side).has("huanghou") or perks_of(victim_side).has("huanghou2"):
 		queen_charge[victim_side] = mini(queen_charge[victim_side] + 1, queen_cap)
-	# 死亡:己方每被吃 1 子,充能 +1(上限 3;逆位力量可累计至 3 倍)
-	var siwang_cap := 9 if perks_of(victim_side).has("liliang2") else 3
+	# 死亡:己方每被吃 1 子,充能 +1(上限 4;逆位力量可累计至 3 倍)
+	var siwang_cap := 12 if perks_of(victim_side).has("liliang2") else 4
 	if perks_of(victim_side).has("siwang") or perks_of(victim_side).has("siwang2"):
 		siwang_charge[victim_side] = mini(siwang_charge[victim_side] + 1, siwang_cap)
 
@@ -3990,8 +4011,30 @@ func _undo_ai_move() -> void:
 func _end_turn() -> void:
 	# 命运之轮:额外行动只在本回合生效
 	extra_move[turn] = false
+	# 中毒:当前方中毒棋子到期自动摧毁(移动解毒)
+	_tick_poison(turn)
 	turn = 1 - turn
 	_begin_turn()
+
+
+# 中毒计时:己方被中毒的棋子到期(剩余0)自动摧毁
+func _tick_poison(side: int) -> void:
+	if poison_map.is_empty():
+		return
+	var gone: Array = []
+	for pos in poison_map.keys():
+		var p = board[pos.y][pos.x] if R.in_board(pos) else null
+		if p == null:
+			gone.append(pos)  # 该子已被吃/移走,清理标记
+			continue
+		if p["side"] != side:
+			continue  # 非本方棋子,不在本方回合计时(在其所属方回合计时)
+		poison_map[pos] = int(poison_map[pos]) - 1
+		if poison_map[pos] <= 0:
+			board[pos.y][pos.x] = null  # 毒发摧毁
+			gone.append(pos)
+	for pos in gone:
+		poison_map.erase(pos)
 
 
 # ==================== 存档 ====================
@@ -4460,9 +4503,9 @@ func _add_perk_cards(box: Container, side_id: int, is_self: bool) -> void:
 		if id == "huanghou":
 			var qcap := 3 if perks_of(side_id).has("liliang2") else 1
 			prog = "充能 %d/%d" % [queen_charge[side_id], qcap]
-		elif id == "siwang":
-			var scap := 9 if perks_of(side_id).has("liliang2") else 3
-			prog = "充能 %d/%d" % [siwang_charge[side_id], scap]
+		elif id == "siwang" or id == "siwang2":
+			var need := 3 if id == "siwang" else 4
+			prog = "充能 %d/%d" % [siwang_charge[side_id], need]
 		elif id == "lianren2":
 			prog = "充能 %d/2" % lianren2_charge[side_id]
 		elif id == "xingxing2":
@@ -4491,8 +4534,9 @@ func _skill_ready(side: int, perk_id: String) -> bool:
 		var cap := 3 if perks_of(side).has("liliang2") else 1
 		return queen_charge[side] >= cap
 	if perk_id == "siwang":
-		var cap := 9 if perks_of(side).has("liliang2") else 3
-		return siwang_charge[side] >= cap
+		return siwang_charge[side] >= 3
+	if perk_id == "siwang2":
+		return siwang_charge[side] >= 4
 	if perk_id == "lianren2":
 		return lianren2_charge[side] >= 2
 	if perk_id == "xingxing2":
@@ -4860,7 +4904,7 @@ func _skill_lianren2(side: int) -> void:
 	var qcap := 3 if perks_of(side).has("liliang2") else 1
 	if perks_of(side).has("huanghou") or perks_of(side).has("huanghou2"):
 		queen_charge[side] = qcap
-	var scap := 9 if perks_of(side).has("liliang2") else 3
+	var scap := 12 if perks_of(side).has("liliang2") else 4
 	if perks_of(side).has("siwang") or perks_of(side).has("siwang2"):
 		siwang_charge[side] = scap
 	status_label.text = "恋人:己方其他技能全部完成冷却/充能"
@@ -4932,33 +4976,15 @@ func _skill_justice2(side: int) -> void:
 
 # 死亡(进阶):随机摧毁敌我各一子(将帅除外),己方 50% 免疫
 func _skill_death2(side: int) -> void:
-	if siwang_charge[side] <= 0:
-		status_label.text = "[死亡] 充能中:己方每被吃 1 子充能 1 点"
+	if siwang_charge[side] < 4:
+		status_label.text = "[死亡] 充能中:己方每被吃 1 子 +1(需 4 点)"
 		return
-	siwang_charge[side] -= 1
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-	var own: Array[Vector2i] = []
-	var enemy: Array[Vector2i] = []
-	for r in R.ROWS:
-		for c in R.COLS:
-			var q = board[r][c]
-			if q == null or q["type"] == R.Type.KING:
-				continue
-			var v := Vector2i(c, r)
-			if q["side"] == side:
-				own.append(v)
-			else:
-				enemy.append(v)
-	if not own.is_empty():
-		var o: Vector2i = own.pick_random()
-		if rng.randf() >= 0.5:
-			board[o.y][o.x] = null
-	if not enemy.is_empty():
-		var e: Vector2i = enemy.pick_random()
-		board[e.y][e.x] = null
+	siwang_charge[side] -= 4
+	# 下回合所有移动的非己方棋子进入中毒3回合(到期摧毁,移动解毒)
+	death2_poison_active = true
+	death2_poison_caster = side
 	_apply_skill_cd("siwang2", side)
-	status_label.text = "死亡:随机摧毁敌我各一子"
+	status_label.text = "死亡:下回合移动的非己方棋子将中毒3回合"
 	_refresh_move_log()
 	queue_redraw()
 	_consume_turn_after_skill()
@@ -4977,7 +5003,7 @@ func _start_targeting(perk_id: String, side: int) -> void:
 		"zhanche", "zhanche2":
 			status_label.text = "选择己方的车"
 		"siwang":
-			status_label.text = "选择己方一枚棋子(摧毁敌我同类型)"
+			status_label.text = "选择对方一子(使其中毒2回合,移动解毒)"
 		"diaodiao", "diaodiao2":
 			status_label.text = "选择要控制的对方棋子"
 		"yinzhe":
@@ -5100,25 +5126,26 @@ func _handle_king_counter(pos: Vector2i, side: int) -> void:
 # 死亡:选己方一子,摧毁敌我各一枚同类型子(消耗被吃充能)
 func _handle_death_target(pos: Vector2i, side: int) -> void:
 	var p = board[pos.y][pos.x]
-	if p == null or p["side"] != side:
-		status_label.text = "请选择己方棋子"
+	if p == null or p["side"] == side:
+		status_label.text = "请选择对方的棋子(中毒)"
 		return
-	if siwang_charge[side] <= 0:
-		status_label.text = "[死亡] 充能中:己方每被吃 1 子充能 1 点"
+	if siwang_charge[side] < 3:
+		status_label.text = "[死亡] 充能中:己方每被吃 1 子 +1(需 3 点)"
 		return
 	if net_role == "client":
 		_done_targeting()
 		request_skill.rpc_id(1, "siwang", {"pos": [pos.x, pos.y]})
 		status_label.text = "死亡:技能已发送,等待同步"
 		return
-	siwang_charge[side] -= 1
-	_destroy_same_type(pos, side)
+	siwang_charge[side] -= 3
+	poison_map[pos] = 2  # 非己方子中毒2回合(移动解毒,到期摧毁)
 	_done_targeting()
 	_show_skill_announce("siwang", side)
+	_consume_turn_after_skill()
 	if net_role == "host":
 		notify_skill_used.rpc("siwang", side)
-		_consume_turn_after_skill()
 		_broadcast_state()
+	queue_redraw()
 
 
 # 倒吊人:获得对方一子控制权(普通=一回合,进阶=三回合且不能吃子)
@@ -6276,6 +6303,11 @@ func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 	var captured = board[to.y][to.x]
 	board[to.y][to.x] = mover
 	board[from.y][from.x] = null
+	# 中毒:移动即解毒;死亡逆位:下回合移动的非己方棋子进入中毒
+	if poison_map4.has(from):
+		poison_map4.erase(from)
+	if death2_poison_active4 and side != death2_poison_caster4:
+		poison_map4[to] = 3
 	# 移动动画:记录起点/终点像素
 	_move_anims.append({
 		"piece": mover,
@@ -6563,6 +6595,9 @@ func _occupy_winner4() -> int:
 
 
 func _handle_capture4(captured: Dictionary, captured_pos: Vector2i, attacker_side: int) -> void:
+	# 被吃子若中毒,标记清除
+	if poison_map4.has(captured_pos):
+		poison_map4.erase(captured_pos)
 	var victim_side: int = captured["side"]
 	# 反制:被吃时同归于尽
 	var counter_triggered: bool = false
@@ -6731,6 +6766,10 @@ func _begin_turn4() -> void:
 	# 倒吊人正位:切换操控模式(每子每回合限移一次)
 	if control_foreign4[side]:
 		_controlled_moved4 = []
+	# 死亡逆位:移动中毒效果在敌方回合生效,轮到施法方便结束
+	if death2_poison_active4 and death2_poison_caster4 == side:
+		death2_poison_active4 = false
+		death2_poison_caster4 = -1
 	# 恶魔逆位:免疫回合递减
 	for s4 in 4:
 		if emo2_turns4[s4] > 0:
@@ -6843,12 +6882,34 @@ func _turn_action_cap4() -> int:
 
 func _end_turn4() -> void:
 	extra_move4[current_side4()] = false
+	# 中毒:当前方中毒棋子到期自动摧毁
+	_tick_poison4(current_side4())
 	turn4 += 1
 	while not alive4[current_side4()]:
 		turn4 += 1
 	# 注:倒吊人控制权(正位)不在此递减——与双人一致,在被控子移动后清除(见 _move4);
 	# 逆位全控制回合在 _begin_turn4 按控制方回合递减
 	_begin_turn4()
+
+
+# 四人中毒计时:到期自动摧毁
+func _tick_poison4(side: int) -> void:
+	if poison_map4.is_empty():
+		return
+	var gone: Array = []
+	for pos in poison_map4.keys():
+		var p = board[pos.y][pos.x] if R.in_board(pos, board) else null
+		if p == null:
+			gone.append(pos)
+			continue
+		if p["side"] != side:
+			continue
+		poison_map4[pos] = int(poison_map4[pos]) - 1
+		if poison_map4[pos] <= 0:
+			board[pos.y][pos.x] = null
+			gone.append(pos)
+	for pos in gone:
+		poison_map4.erase(pos)
 
 
 func _next_alive4(side: int) -> int:
@@ -7268,12 +7329,12 @@ func _execute_skill4(perk_id: String, side: int, params: Dictionary) -> void:
 				return
 			"siwang":
 				var p3 = board[pos.y][pos.x]
-				if p3 == null or p3["side"] != side:
+				if p3 == null or p3["side"] == side:
 					return
-				if siwang_charge4[side] <= 0:
+				if siwang_charge4[side] < 3:
 					return
-				siwang_charge4[side] -= 1
-				_destroy_same_type4(pos, side)
+				siwang_charge4[side] -= 3
+				poison_map4[pos] = 2  # 非己方子中毒2回合
 				_record_skill4(side, "siwang")
 				notify_skill_used4.rpc("siwang", side)
 				_consume_turn_after_skill4()
@@ -7456,7 +7517,7 @@ func _skill_lianren2_4(side: int) -> void:
 	var qcap4 := 3 if perks4[side].has("liliang2") else 1
 	if perks4[side].has("huanghou") or perks4[side].has("huanghou2"):
 		queen_charge4[side] = qcap4
-	var scap4 := 9 if perks4[side].has("liliang2") else 3
+	var scap4 := 12 if perks4[side].has("liliang2") else 4
 	if perks4[side].has("siwang") or perks4[side].has("siwang2"):
 		siwang_charge4[side] = scap4
 	_show_status4("恋人:己方其他技能全部完成冷却/充能")
@@ -7522,32 +7583,14 @@ func _skill_justice2_4(side: int) -> void:
 
 
 func _skill_death2_4(side: int) -> void:
-	if siwang_charge4[side] <= 0:
-		_show_status4("[死亡] 充能中:己方每被吃 1 子充能 1 点")
+	if siwang_charge4[side] < 4:
+		_show_status4("[死亡] 充能中:己方每被吃 1 子 +1(需 4 点)")
 		return
-	siwang_charge4[side] -= 1
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-	var own: Array[Vector2i] = []
-	var enemy: Array[Vector2i] = []
-	for r in board.size():
-		for c in board[r].size():
-			var q = board[r][c]
-			if q == null or q["type"] == R.Type.KING:
-				continue
-			var v := Vector2i(c, r)
-			if q["side"] == side:
-				own.append(v)
-			else:
-				enemy.append(v)
-	if not own.is_empty():
-		var o: Vector2i = own.pick_random()
-		if rng.randf() >= 0.5:
-			board[o.y][o.x] = null
-	if not enemy.is_empty():
-		var e: Vector2i = enemy.pick_random()
-		board[e.y][e.x] = null
+	siwang_charge4[side] -= 4
+	# 下回合所有移动的非己方棋子进入中毒3回合
+	death2_poison_active4 = true
+	death2_poison_caster4 = side
 	_apply_skill_cd4("siwang2", side)
-	_show_status4("死亡:随机摧毁敌我各一子")
+	_show_status4("死亡:下回合移动的非己方棋子将中毒3回合")
 	queue_redraw()
 	_consume_turn_after_skill4()
