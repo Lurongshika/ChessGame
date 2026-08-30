@@ -7487,8 +7487,8 @@ func _execute_skill4(perk_id: String, side: int, params: Dictionary) -> void:
 		if perk_id == "moshushi":
 			if mpa["side"] != side or mpb["side"] != side:
 				return
-		else:  # moshushi2: 交换其他方的两子(同侧,不能是将/帅)
-			if mpa["side"] == side or mpb["side"] == side or mpa["side"] != mpb["side"]:
+		else:  # moshushi2: 交换其他方的两子(非己方即可,不能是将/帅)
+			if mpa["side"] == side or mpb["side"] == side:
 				return
 			if mpa["type"] == R.Type.KING or mpb["type"] == R.Type.KING:
 				return
