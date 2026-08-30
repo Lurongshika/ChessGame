@@ -61,15 +61,15 @@ void fragment() {
 	// 选中确认感:虹彩闪箔(参考 balatro POLYCHROME)+ 亮金发光边框(非常醒目)
 	if (selected > 0.01) {
 		float edge = min(min(v_uv.x, 1.0 - v_uv.x), min(v_uv.y, 1.0 - v_uv.y));
-		float tsp = (v_uv.x + v_uv.y) * 6.0 + time * 1.5;
+		float tsp = (v_uv.x + v_uv.y) * 3.0 + time * 1.2;
 		vec3 holo = 0.5 + 0.5 * cos(6.2831 * (tsp + vec3(0.0, 0.33, 0.67)));
 		float pulse = 0.8 + 0.2 * sin(time * 7.0);
 		// 整卡叠一层虹彩
 		col.rgb = mix(col.rgb, col.rgb * (0.72 + holo * 0.55), 0.4 * selected);
-		// 斜向扫过的虹彩流光带
-		float band = sin((v_uv.x + v_uv.y) * 26.0 - time * 5.0);
-		float sheen = smoothstep(0.3, 1.0, band);
-		col.rgb += holo * sheen * 0.55 * selected;
+		// 斜向扫过的虹彩流光带(加粗)
+		float band = sin((v_uv.x + v_uv.y) * 8.0 - time * 3.5);
+		float sheen = smoothstep(0.0, 1.0, band);
+		col.rgb += holo * sheen * 0.6 * selected;
 		// 亮金边框(替换卡面边缘)
 		vec3 gold = vec3(1.0, 0.9, 0.45);
 		float frame = smoothstep(0.20, 0.025, edge);
