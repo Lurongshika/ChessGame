@@ -9,6 +9,8 @@ const PerkCard := preload("res://scripts/perk_card.gd")
 const Profile := preload("res://scripts/profile_util.gd")
 const BgLayer := preload("res://scripts/bg_layer.gd")
 const ChatPanel := preload("res://scripts/chat_panel.gd")
+const TarotTooltip := preload("res://scripts/tarot_tooltip.gd")
+const Tarot := preload("res://scripts/tarot.gd")
 
 const CELL := 56
 # 棋盘在 1280×720 窗口中直接居中:中心 x=(1280-504)/2=388,中心 y=(720-560)/2=80
@@ -194,6 +196,7 @@ var result_root: Control
 var four_result_root: Control  # 四人:结算遮罩(返回大厅)
 var net_wait_label: Label
 var chat: Panel  # 对局聊天栏
+var _tip: Control  # 塔罗牌技能信息悬浮提示(共享)
 var record_panel: Panel  # 对局记录中心悬浮窗
 var record_btn: Button  # 屏幕下方对局记录按钮
 var record_box: VBoxContainer
@@ -333,6 +336,11 @@ func _build_ui() -> void:
 
 	ui = CanvasLayer.new()
 	add_child(ui)
+
+	# 塔罗牌技能信息悬浮提示(共享,挂在最上层 UI)
+	_tip = TarotTooltip.new()
+	_tip.setup(_font())
+	ui.add_child(_tip)
 
 	status_label = _make_label("", 24, Color(1, 0.95, 0.85))
 	status_label.position = Vector2(0, 10)
@@ -641,8 +649,8 @@ func _refresh_perk_panels4() -> void:
 			if not prog.is_empty():
 				tip += "  [%s]" % prog
 			var card := PerkCard.new()
-			card.setup(id, side, info["name"], tip, info["desc"], _font(), true, 200.0)
-			# 四人:技能卡背景用该方玩家颜色
+			card.setup(id, side, info["name"], tip, info["desc"], _font(), true, 200.0, _tip)
+			# 四人:技能卡边框用该方玩家颜色
 			card.bg_tint = _side_color(side)
 			card._refresh_style(true, 200.0)
 			card.clicked.connect(_on_perk_clicked4)
@@ -3080,11 +3088,10 @@ func _update_draft_ui() -> void:
 			var info: Dictionary = perks_data[id]
 			var card := PerkCard.new()
 			var is_sel: bool = id in picked
-			card.setup(id, cur_side, info["name"], info.get("tip", ""), info["desc"], _font(), true, 230.0)
-			card.position = Vector2(160 + (i % 4) * 245, 140 + (i / 4) * 210)
-			card.size = Vector2(230, 120)
-			card.selected = is_sel
-			card._refresh_style(true, 230.0)
+			card.setup(id, cur_side, info["name"], info.get("tip", ""), info["desc"], _font(), true, 160.0, _tip)
+			card.position = Vector2(288 + (i % 4) * 176, 150 + (i / 4) * 262)
+			card.size = Tarot.card_size(160.0)
+			card.set_selected(is_sel)
 			card.clicked.connect(func(pid: String, _s: int):
 				if pid in _draft_selected4:
 					_draft_selected4.erase(pid)
@@ -3097,11 +3104,11 @@ func _update_draft_ui() -> void:
 			)
 			draft_root.add_child(card)
 		# 确认按钮
-		var confirm := _make_button("确认选择", Vector2(1280 / 2 - 120, 140 + 2 * 210 + 20), Vector2(240, 52))
+		var confirm := _make_button("确认选择", Vector2(1280 / 2 - 120, 150 + 2 * 262 + 20), Vector2(240, 40))
 		confirm.pressed.connect(_confirm_draft4)
 		draft_root.add_child(confirm)
 		var hint := _make_label("点击技能卡选中/取消,选满 3 个后点确认", 16, Color(0.85, 0.82, 0.75))
-		hint.position = Vector2(0, 140 + 2 * 210 + 80)
+		hint.position = Vector2(0, 108)
 		hint.size = Vector2(1280, 24)
 		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		draft_root.add_child(hint)
@@ -3116,14 +3123,14 @@ func _update_draft_ui() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	draft_root.add_child(title)
 
-	# 双人:3 张选项卡
+	# 双人:3 张塔罗牌选项卡
 	for i in cur_opts.size():
 		var id: String = cur_opts[i]
 		var info: Dictionary = perks_data[id]
 		var card := PerkCard.new()
-		card.setup(id, cur_side, info["name"], info.get("tip", ""), info["desc"], _font(), true, 250.0)
-		card.position = Vector2(240 + i * 270, 240)
-		card.size = Vector2(250, 100)
+		card.setup(id, cur_side, info["name"], info.get("tip", ""), info["desc"], _font(), true, 190.0, _tip)
+		card.position = Vector2(339 + i * 202, 180)
+		card.size = Tarot.card_size(190.0)
 		card.clicked.connect(func(pid: String, _s: int):
 			if four_mode:
 				_select_draft_option4(pid)
@@ -3141,7 +3148,7 @@ func _update_draft_ui() -> void:
 		info_label = _make_label("\n".join(texts4), 14, Color(0.85, 0.82, 0.75))
 	else:
 		info_label = _make_label("红方已选: " + _selected_names(R.Side.RED) + "\n黑方已选: " + _selected_names(R.Side.BLACK), 15, Color(0.85, 0.82, 0.75))
-	info_label.position = Vector2(0, 420)
+	info_label.position = Vector2(0, 500)
 	info_label.size = Vector2(1280, 60)
 	info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	draft_root.add_child(info_label)
@@ -4327,7 +4334,7 @@ func _add_perk_cards(box: VBoxContainer, side_id: int, is_self: bool) -> void:
 		if not prog.is_empty():
 			tip += "  [%s]" % prog
 		var card := PerkCard.new()
-		card.setup(id, side_id, info["name"], tip, info["desc"], _font(), is_self, 210.0)
+		card.setup(id, side_id, info["name"], tip, info["desc"], _font(), is_self, 210.0, _tip)
 		card.clicked.connect(_on_perk_clicked)
 		box.add_child(card)
 

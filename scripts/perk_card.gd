@@ -1,61 +1,78 @@
-# 技能卡:圆角矩形卡片,名字/tip/描述三部分,可点击(主动技能触发)
+# 技能卡:塔罗牌样式(正位/逆位牌面),可点击(主动技能触发)
+# 鼠标悬浮时在鼠标右下方显示技能信息 tooltip
+# 牌面:assets/Tarot_Original/8X/{编号}_{英文名}.png,逆位 = 同一张图垂直翻转
 extends Panel
 
 signal clicked(perk_id: String, side: int)
 
+const Tarot := preload("res://scripts/tarot.gd")
+
 var perk_id := ""
 var _side := -1
 var selected := false
-var bg_tint := Color(-1, -1, -1)  # 自定义背景色(-1 表示用默认)
+var bg_tint := Color(-1, -1, -1)  # 自定义边框色(四人模式玩家色,-1 表示用默认)
+var _tooltip: Control              # 共享悬浮提示(可空)
+var _title := ""
+var _tip_text := ""
+var _desc := ""
+var _font: Font
 
 
-func setup(id: String, side_id: int, title: String, tip: String, desc: String, font: Font, is_self: bool, card_w: float) -> void:
+func setup(id: String, side_id: int, title: String, tip: String, desc: String, font: Font, is_self: bool, card_w: float, tooltip: Control = null) -> void:
 	perk_id = id
 	_side = side_id
-	_refresh_style(is_self, card_w)
-	# 描述每 18 字换行,卡片高度自适应
-	var wrapped_desc := ""
-	var ch_count := 0
-	for ch in desc:
-		wrapped_desc += ch
-		ch_count += 1
-		if ch_count >= 18:
-			wrapped_desc += "\n"
-			ch_count = 0
-	var desc_lines := maxi(1, ceili(desc.length() / 18.0))
-	var card_h := 41 + desc_lines * 15 + 6
-	custom_minimum_size = Vector2(card_w, card_h)
+	_title = title
+	_tip_text = tip
+	_desc = desc
+	_font = font
+	_tooltip = tooltip
+
+	# 默认按牌面比例;调用方可再设置 size(牌图保持比例居中,不变形)
+	custom_minimum_size = Tarot.card_size(card_w)
 
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	mouse_entered.connect(_on_hover_enter)
+	mouse_exited.connect(_on_hover_exit)
+
+	# 牌面(铺满矩形,按比例居中)
+	var tex := TextureRect.new()
+	tex.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tex.texture = Tarot.texture(id)
+	tex.flip_v = Tarot.is_reversed(id)
+	add_child(tex)
+
+	# 牌面底部:中文技能名(半透明黑条)
+	var n := Label.new()
+	n.text = title
+	n.add_theme_font_override("font", font)
+	n.add_theme_font_size_override("font_size", 12)
+	n.add_theme_color_override("font_color", Color(1, 0.95, 0.82))
+	n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	n.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	n.position = Vector2(0, -18)
+	n.size = Vector2(size.x, 18)
+	n.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE, Control.PRESET_MODE_KEEP_SIZE)
+	n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var nb := StyleBoxFlat.new()
+	nb.bg_color = Color(0, 0, 0, 0.55)
+	n.add_theme_stylebox_override("normal", nb)
+	add_child(n)
+
 	_refresh_style(is_self, card_w)
 
-	var t := Label.new()
-	t.text = title
-	t.add_theme_font_override("font", font)
-	t.add_theme_font_size_override("font_size", 15)
-	t.add_theme_color_override("font_color", Color(1, 0.93, 0.75))
-	t.position = Vector2(10, 4)
-	t.size = Vector2(card_w - 20, 20)
-	add_child(t)
 
-	var tp := Label.new()
-	tp.text = tip
-	tp.add_theme_font_override("font", font)
-	tp.add_theme_font_size_override("font_size", 11)
-	tp.add_theme_color_override("font_color", Color(0.62, 0.82, 1.0) if is_self else Color(1.0, 0.7, 0.6))
-	tp.position = Vector2(10, 24)
-	tp.size = Vector2(card_w - 20, 15)
-	add_child(tp)
+# 鼠标悬浮:在共享 tooltip 显示技能信息
+func _on_hover_enter() -> void:
+	if _tooltip != null and _tooltip.has_method("show_for"):
+		_tooltip.show_for(perk_id, _title, _tip_text, _desc)
 
-	var d := Label.new()
-	d.text = wrapped_desc
-	d.add_theme_font_override("font", font)
-	d.add_theme_font_size_override("font_size", 11)
-	d.add_theme_color_override("font_color", Color(0.85, 0.82, 0.78))
-	d.position = Vector2(10, 41)
-	d.size = Vector2(card_w - 20, desc_lines * 15)
-	d.autowrap_mode = TextServer.AUTOWRAP_OFF
-	add_child(d)
+
+func _on_hover_exit() -> void:
+	if _tooltip != null and _tooltip.has_method("hide_tip"):
+		_tooltip.hide_tip()
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -79,25 +96,29 @@ func _raise_panel() -> void:
 		node = node.get_parent()
 
 
-func _refresh_style(is_self: bool, card_w: float) -> void:
-	# 圆角矩形样式(己方偏蓝,敌方偏红;选中金色高亮)
+# 选中态(图鉴/选卡界面用)
+func set_selected(v: bool) -> void:
+	selected = v
+	_refresh_style(true, 0.0)
+
+
+# 边框样式:选中金色;bg_tint 玩家色;默认深色底 + 细边框
+func _refresh_style(is_self: bool, card_w: float = 0.0) -> void:
 	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0.08, 0.09, 0.13, 0.95)
 	if selected:
-		bg.bg_color = Color(0.35, 0.28, 0.12, 0.97)
+		bg.bg_color = Color(0.12, 0.1, 0.06, 0.97)
 		bg.border_color = Color(1.0, 0.85, 0.3)
 		bg.set_border_width_all(3)
-	else:
-		if bg_tint.r >= 0.0:
-			# 自定义背景色(四人模式玩家色)
-			bg.bg_color = Color(bg_tint.r * 0.55 + 0.15, bg_tint.g * 0.55 + 0.12, bg_tint.b * 0.55 + 0.12, 0.95)
-			bg.border_color = bg_tint
-		elif is_self:
-			bg.bg_color = Color(0.18, 0.28, 0.4, 0.95)
-			bg.border_color = Color(0.55, 0.68, 0.85)
-		else:
-			bg.bg_color = Color(0.38, 0.24, 0.2, 0.92)
-			bg.border_color = Color(0.85, 0.55, 0.45)
+	elif bg_tint.r >= 0.0:
+		bg.border_color = bg_tint
+		bg.set_border_width_all(2)
+	elif is_self:
+		bg.border_color = Color(0.55, 0.68, 0.85)
 		bg.set_border_width_all(1)
-	bg.set_corner_radius_all(8)
+	else:
+		bg.border_color = Color(0.85, 0.55, 0.45)
+		bg.set_border_width_all(1)
+	bg.set_corner_radius_all(6)
 	add_theme_stylebox_override("panel", bg)
 	queue_redraw()

@@ -3,6 +3,9 @@
 extends Control
 
 const Perks := preload("res://scripts/perks.gd")
+const Tarot := preload("res://scripts/tarot.gd")
+const TarotTooltip := preload("res://scripts/tarot_tooltip.gd")
+const TarotCard := preload("res://scripts/perk_card.gd")
 
 const BOARD_STANDARD := [
 	"RHEAKAEHR",
@@ -1531,6 +1534,8 @@ var current_id := ""
 var info_title: Label
 var info_tip: Label
 var info_desc: Label
+var _tip: Control            # 塔罗牌技能信息悬浮提示(共享)
+var _info_card: TextureRect  # 中间:选中技能的大牌面
 
 
 func _font() -> Font:
@@ -1555,47 +1560,62 @@ func _ready() -> void:
 	back.pressed.connect(func(): Global.change_scene_with_fade("res://scenes/main.tscn"))
 	add_child(back)
 
-	# 左侧技能列表
+	# 左侧:44 张塔罗牌列表(4 列,可滚动)
 	var list_bg := ColorRect.new()
 	list_bg.color = Color(0.12, 0.11, 0.1)
 	list_bg.position = Vector2(20, 80)
-	list_bg.size = Vector2(260, 600)
+	list_bg.size = Vector2(460, 600)
 	add_child(list_bg)
 	var scroll := ScrollContainer.new()
 	scroll.position = Vector2(20, 80)
-	scroll.size = Vector2(260, 600)
+	scroll.size = Vector2(460, 600)
 	add_child(scroll)
 	list_box = VBoxContainer.new()
-	list_box.custom_minimum_size = Vector2(240, 0)
+	list_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(list_box)
 	_build_list()
 
-	# 中间:技能描述
+	# 中间:技能信息(大牌面 + 描述)
 	var info_bg := ColorRect.new()
 	info_bg.color = Color(0.13, 0.12, 0.11)
-	info_bg.position = Vector2(300, 80)
+	info_bg.position = Vector2(500, 80)
 	info_bg.size = Vector2(540, 560)
 	add_child(info_bg)
 
-	info_title = _make_label("请选择左侧技能", 30, Color(0.95, 0.85, 0.6))
-	info_title.position = Vector2(320, 110)
-	info_title.size = Vector2(500, 44)
+	# 选中技能的大牌面(正位/逆位)
+	_info_card = TextureRect.new()
+	_info_card.position = Vector2(520, 100)
+	_info_card.size = Tarot.card_size(200.0)
+	_info_card.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_info_card.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_info_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_info_card)
+
+	info_title = _make_label("请选择左侧技能", 26, Color(0.95, 0.85, 0.6))
+	info_title.position = Vector2(750, 110)
+	info_title.size = Vector2(270, 40)
+	info_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(info_title)
 
-	info_tip = _make_label("", 16, Color(0.85, 0.75, 0.5))
-	info_tip.position = Vector2(320, 165)
-	info_tip.size = Vector2(500, 30)
+	info_tip = _make_label("", 15, Color(0.85, 0.75, 0.5))
+	info_tip.position = Vector2(750, 158)
+	info_tip.size = Vector2(270, 26)
 	add_child(info_tip)
 
-	info_desc = _make_label("", 16, Color(0.9, 0.88, 0.82))
-	info_desc.position = Vector2(320, 210)
-	info_desc.size = Vector2(500, 160)
+	info_desc = _make_label("", 15, Color(0.9, 0.88, 0.82))
+	info_desc.position = Vector2(750, 196)
+	info_desc.size = Vector2(270, 200)
 	add_child(info_desc)
 
 	# 最右侧:进入模拟对局(始终显示)
-	var right_btn := _make_button("进入模拟对局", Vector2(1040, 320), Vector2(200, 56))
+	var right_btn := _make_button("进入模拟对局", Vector2(1060, 320), Vector2(180, 56))
 	right_btn.pressed.connect(_start_demo)
 	add_child(right_btn)
+
+	# 塔罗牌技能信息悬浮提示(共享,顶层)
+	_tip = TarotTooltip.new()
+	_tip.setup(_font())
+	add_child(_tip)
 
 	# 默认选中第一个技能(愚者)
 	if not Perks.PERKS_NORMAL.is_empty():
@@ -1605,58 +1625,40 @@ func _ready() -> void:
 
 func _build_list() -> void:
 	var perks := Perks.load_perks("all")
-	# 正位在前,逆位在后;文字向右移半个字号(约 8px)
-	for row in Perks.PERKS_NORMAL:
+	# 正位在前,逆位在后;牌面按 4 列网格排列
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 12)
+	grid.custom_minimum_size = Vector2(432, 0)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list_box.add_child(grid)
+	for row in Perks.PERKS_NORMAL + Perks.PERKS_ADVANCED:
 		var id: String = row["id"]
-		var b := _make_button(perks[id]["name"], Vector2(0, 0), Vector2(240, 40))
-		b.custom_minimum_size = Vector2(240, 40)
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.pressed.connect(func(sid: String = id): _select_skill(sid))
-		b.set_meta("skill_id", id)
-		list_box.add_child(b)
-	for row in Perks.PERKS_ADVANCED:
-		var id2: String = row["id"]
-		var b2 := _make_button(perks[id2]["name"], Vector2(0, 0), Vector2(240, 40))
-		b2.custom_minimum_size = Vector2(240, 40)
-		b2.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b2.pressed.connect(func(sid: String = id2): _select_skill(sid))
-		b2.set_meta("skill_id", id2)
-		list_box.add_child(b2)
+		var info: Dictionary = perks[id]
+		var card := TarotCard.new()
+		card.setup(id, 0, info["name"], info.get("tip", ""), _full_desc(id), _font(), true, 100.0, _tip)
+		card.set_meta("skill_id", id)
+		card.clicked.connect(func(sid: String = id): _select_skill(sid))
+		grid.add_child(card)
 
 
-# 高亮选中的技能按钮(清除其他高亮,恢复透明)
+# 高亮选中的技能卡(清除其他高亮,选中金色边框)
 func _highlight_skill(id: String) -> void:
 	if list_box == null:
 		return
 	for child in list_box.get_children():
-		if not child is Button:
+		if not child is GridContainer:
 			continue
-		var b: Button = child
-		var selected: bool = str(b.get_meta("skill_id", "")) == id
-		var sb := StyleBoxFlat.new()
-		if selected:
-			sb.bg_color = Color(0.18, 0.22, 0.3)
-			sb.border_color = Color(0.95, 0.8, 0.2)
-			sb.set_border_width_all(2)
-		else:
-			sb.bg_color = Color(0, 0, 0, 0)
-			sb.border_color = Color(0, 0, 0, 0)
-			sb.set_border_width_all(0)
-		sb.set_corner_radius_all(4)
-		b.add_theme_stylebox_override("normal", sb)
-		b.add_theme_stylebox_override("hover", sb)
-		b.add_theme_stylebox_override("pressed", sb)
+		for c in child.get_children():
+			if c.has_method("set_selected"):
+				c.set_selected(str(c.get_meta("skill_id", "")) == id)
 
 
-# 点击技能:显示技能描述(不立即进对局)
-func _select_skill(id: String) -> void:
-	_highlight_skill(id)
-	current_id = id
+# 技能描述 + 策略建议(图鉴信息面板与悬浮提示共用)
+func _full_desc(id: String) -> String:
 	var perks := Perks.load_perks("all")
-	var pk: Dictionary = perks.get(id, {})
-	info_title.text = pk.get("name", id)
-	info_tip.text = pk.get("tip", "")
-	var desc: String = pk.get("desc", "")
+	var desc: String = perks.get(id, {}).get("desc", "")
 	# 策略建议:优先用 STRATEGY 表,否则从演示文案提取"策略:"部分
 	var strat: String = STRATEGY.get(id, "")
 	if strat.is_empty():
@@ -1667,7 +1669,21 @@ func _select_skill(id: String) -> void:
 				strat = t.split("策略:", 1)[1].split("\n")[0].strip_edges()
 	if not strat.is_empty():
 		desc += "\n\n策略建议:\n" + strat
-	info_desc.text = desc
+	return desc
+
+
+# 点击技能:显示技能描述与牌面(不立即进对局)
+func _select_skill(id: String) -> void:
+	_highlight_skill(id)
+	current_id = id
+	var perks := Perks.load_perks("all")
+	var pk: Dictionary = perks.get(id, {})
+	info_title.text = pk.get("name", id)
+	info_tip.text = pk.get("tip", "")
+	info_desc.text = _full_desc(id)
+	# 中间大牌面:正位/逆位
+	_info_card.texture = Tarot.texture(id)
+	_info_card.flip_v = Tarot.is_reversed(id)
 
 
 # 最右侧按钮:进入模拟对局(玩家拥有当前技能 vs 无技能机器人)
