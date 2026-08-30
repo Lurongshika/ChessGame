@@ -62,6 +62,7 @@ var invincible_piece_side := -1    # 皇帝:无敌棋子所属方(用于"己方�
 var invincible_piece_turns := 0    # 皇帝:无敌剩余回合数(移动后递减)
 var counter_side := -1          # 皇后(进阶):反制方(该方棋子被吃时同归于尽)
 var siwang_charge := {0: 0, 1: 0}  # 死亡:被吃充能(己方每被吃 1 子 +1)
+var lianren2_charge := {0: 0, 1: 0}  # 恋人逆位:被吃充能(需求2,使用后其他技能完成冷却/充能)
 var sync_pieces: Array = []     # 命运之轮(进阶):协同棋子(移动不消耗步数,每子每回合一次)
 var _sync_moved: Array[Vector2i] = []  # 命运之轮(进阶):本回合已免费移动过的协同棋子(防无限移动)
 var star2_charge := {0: 0, 1: 0}  # 星星逆位:蓄势(每蓄势可免费移动一个兵)
@@ -102,6 +103,7 @@ var invincible_piece_side4 := -1  # 四人:皇帝无敌棋子所属方(用于"�
 var invincible_piece_turns4 := 0  # 四人:皇帝无敌剩余回合数
 var counter_side4 := -1
 var siwang_charge4 := {0: 0, 1: 0, 2: 0, 3: 0}
+var lianren2_charge4 := {0: 0, 1: 0, 2: 0, 3: 0}  # 四人:恋人逆位被吃充能(需求2)
 var star2_charge4 := {0: 0, 1: 0, 2: 0, 3: 0}  # 四人:星星逆位蓄势
 var sync_pieces4: Array = []
 var _sync_moved4: Array[Vector2i] = []  # 四人:协同棋子本回合已免费移动(每回合一次,防无限移动)
@@ -628,6 +630,8 @@ func _refresh_perk_panels4() -> void:
 			elif id == "siwang":
 				var scap4 := 9 if perks4[side].has("liliang2") else 3
 				prog = "充能 %d/%d" % [siwang_charge4[side], scap4]
+			elif id == "lianren2":
+				prog = "充能 %d/2" % lianren2_charge4[side]
 			elif id == "xingxing2":
 				prog = "蓄势 %d" % star2_charge4.get(side, 0)
 			if _is_active_skill(id) and prog.is_empty():
@@ -712,6 +716,8 @@ func _activate_skill4(perk_id: String, side: int) -> void:
 			_skill_justice2_4(side)
 		"siwang2":
 			_skill_death2_4(side)
+		"lianren2":
+			_skill_lianren2_4(side)
 		"moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "yinzhe":
 			_start_targeting4(perk_id, side)
 		"diaodiao":
@@ -2232,6 +2238,7 @@ func _state_to_data() -> Dictionary:
 		"invincible_piece_turns": invincible_piece_turns,
 		"counter_side": counter_side,
 		"siwang_charge": {"0": siwang_charge[0], "1": siwang_charge[1]},
+		"lianren2_charge": {"0": lianren2_charge[0], "1": lianren2_charge[1]},
 		"sync_pieces": _sync_pieces_to_data(),
 		"controlled_turns": controlled_turns,
 		"controlled_all_turns": controlled_all_turns,
@@ -2328,6 +2335,7 @@ func _apply_state_data(data: Dictionary) -> void:
 	invincible_piece_turns = int(data.get("invincible_piece_turns", 0))
 	counter_side = int(data.get("counter_side", -1))
 	siwang_charge = {0: int(data.get("siwang_charge", {}).get("0", 0)), 1: int(data.get("siwang_charge", {}).get("1", 0))}
+	lianren2_charge = {0: int(data.get("lianren2_charge", {}).get("0", 0)), 1: int(data.get("lianren2_charge", {}).get("1", 0))}
 	sync_pieces = []
 	for q in data.get("sync_pieces", []):
 		sync_pieces.append(Vector2i(int(q[0]), int(q[1])))
@@ -3670,9 +3678,9 @@ func _handle_capture(captured: Dictionary, captured_pos: Vector2i, attacker_side
 	revive_count[victim_side] += 1
 	if perks_of(victim_side).has("lianren") and revive_count[victim_side] % 2 == 0:
 		_revive_piece(victim_side)
-	# 恋人(进阶):仅四人模式,每被吃 3 子,随机摧毁敌方 5 子
-	if four_mode and perks_of(victim_side).has("lianren2") and revive_count[victim_side] % 3 == 0:
-		_destroy_random_enemy(victim_side, 5)
+	# 恋人(逆位):被吃充能(需求 2,使用后其他技能完成冷却/充能)
+	if perks_of(victim_side).has("lianren2"):
+		lianren2_charge[victim_side] = mini(lianren2_charge[victim_side] + 1, 2)
 	# 皇后:己方每被吃 1 子,充能 +1(上限 1;逆位力量可累计至 3 倍)
 	var queen_cap := 3 if perks_of(victim_side).has("liliang2") else 1
 	if perks_of(victim_side).has("huanghou") or perks_of(victim_side).has("huanghou2"):
@@ -4308,6 +4316,8 @@ func _add_perk_cards(box: VBoxContainer, side_id: int, is_self: bool) -> void:
 		elif id == "siwang":
 			var scap := 9 if perks_of(side_id).has("liliang2") else 3
 			prog = "充能 %d/%d" % [siwang_charge[side_id], scap]
+		elif id == "lianren2":
+			prog = "充能 %d/2" % lianren2_charge[side_id]
 		elif id == "xingxing2":
 			prog = "蓄势 %d" % star2_charge.get(side_id, 0)
 		if _is_active_skill(id) and prog.is_empty():
@@ -4465,6 +4475,8 @@ func _activate_skill(perk_id: String, side: int) -> void:
 			_skill_justice2(side)
 		"siwang2":
 			_skill_death2(side)
+		"lianren2":
+			_skill_lianren2(side)
 		"moshushi", "moshushi2", "huangdi", "huangdi2", "siwang", "yinzhe":
 			_start_targeting(perk_id, side)
 		"diaodiao":
@@ -4647,6 +4659,28 @@ func _skill_queen(perk_id: String, side: int) -> void:
 	invincible_side = side
 	invincible_side_turns = 2
 	status_label.text = "皇后:己方所有棋子无敌(持续2回合)"
+	queue_redraw()
+	_consume_turn_after_skill()
+
+
+# 恋人(逆位):被吃充能(需求 2),使用后己方其他技能全部完成冷却/充能
+func _skill_lianren2(side: int) -> void:
+	if lianren2_charge[side] < 2:
+		status_label.text = "[恋人] 充能中:己方每被吃 1 子充能 1 点(需 2 点)"
+		return
+	lianren2_charge[side] -= 2
+	# 己方其他主动技能冷却清零
+	for id in skill_cd[side].keys():
+		skill_cd[side][id] = 0
+	# 皇后/死亡充能补满(到各自上限;逆位力量可累计至 3 倍)
+	var qcap := 3 if perks_of(side).has("liliang2") else 1
+	if perks_of(side).has("huanghou") or perks_of(side).has("huanghou2"):
+		queen_charge[side] = qcap
+	var scap := 9 if perks_of(side).has("liliang2") else 3
+	if perks_of(side).has("siwang") or perks_of(side).has("siwang2"):
+		siwang_charge[side] = scap
+	status_label.text = "恋人:己方其他技能全部完成冷却/充能"
+	_refresh_perk_panels()
 	queue_redraw()
 	_consume_turn_after_skill()
 
@@ -6359,8 +6393,9 @@ func _handle_capture4(captured: Dictionary, captured_pos: Vector2i, attacker_sid
 	revive_count4[victim_side] += 1
 	if perks4[victim_side].has("lianren") and revive_count4[victim_side] % 2 == 0:
 		_revive_piece4(victim_side)
-	if perks4[victim_side].has("lianren2") and revive_count4[victim_side] % 3 == 0:
-		_destroy_random_enemy4(victim_side, 5)
+	# 恋人(逆位):被吃充能(需求 2,使用后其他技能完成冷却/充能)
+	if perks4[victim_side].has("lianren2"):
+		lianren2_charge4[victim_side] = mini(lianren2_charge4[victim_side] + 1, 2)
 	# 皇后/死亡:被吃充能(皇后上限 1;逆位力量可累计至 3 倍)
 	var queen_cap4 := 3 if perks4[victim_side].has("liliang2") else 1
 	if perks4[victim_side].has("huanghou") or perks4[victim_side].has("huanghou2"):
@@ -6751,6 +6786,7 @@ func _state_to_data4() -> Dictionary:
 		"emo2_turns4": {"0": emo2_turns4[0], "1": emo2_turns4[1], "2": emo2_turns4[2], "3": emo2_turns4[3]},
 		"emo2_type4": {"0": emo2_type4[0], "1": emo2_type4[1], "2": emo2_type4[2], "3": emo2_type4[3]},
 		"siwang_charge4": {"0": siwang_charge4[0], "1": siwang_charge4[1], "2": siwang_charge4[2], "3": siwang_charge4[3]},
+		"lianren2_charge4": {"0": lianren2_charge4[0], "1": lianren2_charge4[1], "2": lianren2_charge4[2], "3": lianren2_charge4[3]},
 		"star2_charge4": {"0": star2_charge4[0], "1": star2_charge4[1], "2": star2_charge4[2], "3": star2_charge4[3]},
 		"sync_pieces4": _sync_pieces_to_data4(),
 		"controlled_turns4": controlled_turns4,
@@ -6842,6 +6878,7 @@ func _apply_state_data4(data: Dictionary) -> void:
 	emo2_turns4 = {0: int(data.get("emo2_turns4", {}).get("0", 0)), 1: int(data.get("emo2_turns4", {}).get("1", 0)), 2: int(data.get("emo2_turns4", {}).get("2", 0)), 3: int(data.get("emo2_turns4", {}).get("3", 0))}
 	emo2_type4 = {0: int(data.get("emo2_type4", {}).get("0", -1)), 1: int(data.get("emo2_type4", {}).get("1", -1)), 2: int(data.get("emo2_type4", {}).get("2", -1)), 3: int(data.get("emo2_type4", {}).get("3", -1))}
 	siwang_charge4 = {0: int(data.get("siwang_charge4", {}).get("0", 0)), 1: int(data.get("siwang_charge4", {}).get("1", 0)), 2: int(data.get("siwang_charge4", {}).get("2", 0)), 3: int(data.get("siwang_charge4", {}).get("3", 0))}
+	lianren2_charge4 = {0: int(data.get("lianren2_charge4", {}).get("0", 0)), 1: int(data.get("lianren2_charge4", {}).get("1", 0)), 2: int(data.get("lianren2_charge4", {}).get("2", 0)), 3: int(data.get("lianren2_charge4", {}).get("3", 0))}
 	star2_charge4 = {0: int(data.get("star2_charge4", {}).get("0", 0)), 1: int(data.get("star2_charge4", {}).get("1", 0)), 2: int(data.get("star2_charge4", {}).get("2", 0)), 3: int(data.get("star2_charge4", {}).get("3", 0))}
 	sync_pieces4 = []
 	for q in data.get("sync_pieces4", []):
@@ -7213,6 +7250,28 @@ func _skill_queen4(perk_id: String, side: int) -> void:
 		invincible_side4 = side
 		invincible_side_turns4 = 2
 		_show_status4("皇后:己方所有棋子无敌(持续2回合)")
+	queue_redraw()
+	_consume_turn_after_skill4()
+
+
+# 恋人(逆位):被吃充能(需求 2),使用后己方其他技能全部完成冷却/充能
+func _skill_lianren2_4(side: int) -> void:
+	if lianren2_charge4[side] < 2:
+		_show_status4("[恋人] 充能中:己方每被吃 1 子充能 1 点(需 2 点)")
+		return
+	lianren2_charge4[side] -= 2
+	# 己方其他主动技能冷却清零
+	for id in skill_cd4[side].keys():
+		skill_cd4[side][id] = 0
+	# 皇后/死亡充能补满(到各自上限;逆位力量可累计至 3 倍)
+	var qcap4 := 3 if perks4[side].has("liliang2") else 1
+	if perks4[side].has("huanghou") or perks4[side].has("huanghou2"):
+		queen_charge4[side] = qcap4
+	var scap4 := 9 if perks4[side].has("liliang2") else 3
+	if perks4[side].has("siwang") or perks4[side].has("siwang2"):
+		siwang_charge4[side] = scap4
+	_show_status4("恋人:己方其他技能全部完成冷却/充能")
+	_refresh_perk_panels4()
 	queue_redraw()
 	_consume_turn_after_skill4()
 

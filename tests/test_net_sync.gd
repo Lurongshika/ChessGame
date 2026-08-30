@@ -795,6 +795,46 @@ func _run() -> void:
 	_check(scene.skill_cd4[0].get("nvjisi", -1) == 1, "四人:力量正位使己方冷却-2(3→1)")
 	scene.four_mode = false
 
+	# --- 恋人(逆位):被吃充能(需2),使用后其他技能冷却/充能全部完成 ---
+	scene.net_role = "host"
+	scene.phase = scene.Phase.PLAY
+	scene.board = R.make_board()
+	scene.turn = R.Side.RED
+	scene.actions_left = 1
+	scene.perks_red = {"lianren2": true, "huanghou": true, "nvjisi": true}
+	scene.perks_black = {}
+	scene.lianren2_charge = {0: 0, 1: 0}
+	scene.skill_cd = {0: {}, 1: {}}
+	# 被吃 2 子后充能到 2
+	for i in 2:
+		scene._handle_capture({"side": R.Side.RED, "type": R.Type.PAWN, "pos": Vector2i(i, 0), "birth_pos": Vector2i(0, 6)}, Vector2i(i, 0), R.Side.BLACK)
+	_check(scene.lianren2_charge[R.Side.RED] == 2, "恋人逆位:被吃2子充能到2")
+	# 使用后:其他技能冷却清零、皇后充能补满
+	scene.skill_cd[R.Side.RED]["nvjisi"] = 5
+	scene.queen_charge = {0: 0, 1: 0}
+	scene._skill_lianren2(R.Side.RED)
+	_check(scene.lianren2_charge[R.Side.RED] == 0, "恋人逆位:使用后消耗2充能")
+	_check(scene.skill_cd[R.Side.RED].get("nvjisi", -1) == 0, "恋人逆位:其他技能冷却清零")
+	_check(scene.queen_charge[R.Side.RED] == 1, "恋人逆位:皇后充能补满(1)")
+	# 序列化往返
+	var lr_data = scene._state_to_data()
+	scene.lianren2_charge = {0: -1, 1: -1}
+	scene._apply_state_data(lr_data)
+	_check(scene.lianren2_charge[R.Side.RED] == 0, "恋人逆位:充能随状态广播")
+	# 四人:被吃充能与使用刷新
+	scene.four_mode = true
+	scene.board = R.make_board4()
+	scene.perks4 = {0: {"lianren2": true, "huanghou": true}, 1: {}, 2: {}, 3: {}}
+	scene.lianren2_charge4 = {0: 0, 1: 0, 2: 0, 3: 0}
+	scene.queen_charge4 = {0: 0, 1: 0, 2: 0, 3: 0}
+	scene.skill_cd4 = {0: {}, 1: {}, 2: {}, 3: {}}
+	for i in 2:
+		scene._handle_capture4({"side": 0, "type": R.Type.PAWN, "pos": Vector2i(4 + i, 13), "birth_pos": Vector2i(0, 16)}, Vector2i(4 + i, 13), 1)
+	_check(scene.lianren2_charge4[0] == 2, "四人恋人逆位:被吃2子充能到2")
+	scene._skill_lianren2_4(0)
+	_check(scene.lianren2_charge4[0] == 0 and scene.queen_charge4[0] == 1, "四人恋人逆位:使用后消耗充能且皇后充能补满")
+	scene.four_mode = false
+
 	await _test_tab_completion()
 
 	if _failures == 0:
