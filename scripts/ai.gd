@@ -10,18 +10,18 @@ const VALUES := {
 	R.Type.PAWN: 1.0, R.Type.QUEEN: 12.0,
 }
 
-const TIME_LIMIT_2P := 800
+const TIME_LIMIT_2P := 1200
 const TIME_LIMIT_4P := 380
 const MAX_DEPTH_2P := 3
 const MAX_DEPTH_4P := 2
-const QUIESCE_CAP := 6
+const QUIESCE_CAP := 2
 const INF := 900000.0
 const MATE := 100000.0
 
 # ---------- 静态搜索数据 ----------
 static var _tt := {}
 static var _history := {}
-static var _zob := {}
+static var _zob := PackedInt64Array()
 static var _zside := []
 static var _zinit := false
 
@@ -233,12 +233,10 @@ static func _zinit_check() -> void:
 	_zinit = true
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 12345
-	var z := {}
-	for side in 4:
-		for t in 8:
-			for sq in 18 * 18:
-				z["%d:%d:%d" % [side, t, sq]] = rng.randi()
-	_zob = z
+	_zob = PackedInt64Array()
+	_zob.resize(4 * 8 * 324)
+	for i in _zob.size():
+		_zob[i] = rng.randi()
 	_zside = [rng.randi(), rng.randi(), rng.randi(), rng.randi()]
 
 
@@ -249,7 +247,7 @@ static func _hash(board: Array, side: int) -> int:
 			var p = board[r][c]
 			if p == null:
 				continue
-			h ^= int(_zob.get("%d:%d:%d" % [p["side"], p["type"], r * 18 + c], 0))
+			h ^= _zob[(int(p["side"]) * 8 + int(p["type"])) * 324 + r * 18 + c]
 	return h
 
 
@@ -267,10 +265,28 @@ static func _evaluate(board: Array, side: int, perks_red: Dictionary, perks_blac
 				red += v
 			else:
 				black += v
+	# 将帅安全:己方帅留在九宫有保护,离开/暴露减分
+	red += _king_safety(board, R.Side.RED)
+	black += _king_safety(board, R.Side.BLACK)
 	var score := red - black
 	if side == R.Side.BLACK:
 		score = -score
 	return score
+
+
+# 将帅安全:九宫内(红行7-9/黑行0-2,列3-5)得正,暴露/离宫负
+static func _king_safety(board: Array, side: int) -> float:
+	for r in R.ROWS:
+		for c in R.COLS:
+			var p = board[r][c]
+			if p == null or p["type"] != R.Type.KING or p["side"] != side:
+				continue
+			var in_palace: bool = (r >= 7 and c >= 3 and c <= 5) if side == R.Side.RED else (r <= 2 and c >= 3 and c <= 5)
+			if in_palace:
+				return 0.8
+			else:
+				return -0.8
+	return 0.0
 
 
 static func _piece_bonus(r: int, c: int, p) -> float:
