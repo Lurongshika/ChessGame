@@ -620,12 +620,14 @@ func _refresh_perk_panels4() -> void:
 				continue
 			var info: Dictionary = perks_data[id]
 			var tip: String = info.get("tip", "")
-			# 充能进度:皇后/死亡用充能值,星星逆位显示蓄势,主动技能显示剩余冷却
+			# 充能进度:皇后/死亡用充能值(逆位力量可累计至3倍上限),星星逆位显示蓄势,主动技能显示剩余冷却
 			var prog := ""
 			if id == "huanghou":
-				prog = "充能 %d/1" % queen_charge4[side]
+				var qcap4 := 3 if perks4[side].has("liliang2") else 1
+				prog = "充能 %d/%d" % [queen_charge4[side], qcap4]
 			elif id == "siwang":
-				prog = "充能 %d/3" % siwang_charge4[side]
+				var scap4 := 9 if perks4[side].has("liliang2") else 3
+				prog = "充能 %d/%d" % [siwang_charge4[side], scap4]
 			elif id == "xingxing2":
 				prog = "蓄势 %d" % star2_charge4.get(side, 0)
 			if _is_active_skill(id) and prog.is_empty():
@@ -779,11 +781,7 @@ func _apply_skill_cd4(perk_id: String, side: int) -> void:
 		return
 	if perks4[side].has("liliang"):
 		cd = maxi(cd - 2, 0)  # 力量:我方主动技能冷却-2
-	# 力量逆位:任意其他方有此技能时,该方技能冷却+2
-	for es in 4:
-		if es != side and perks4[es].has("liliang2"):
-			cd += 2
-			break
+	# 注:逆位力量已改为"充能可累计至3倍上限",不再影响其他方冷却
 	if cd > 0:
 		skill_cd4[side][perk_id] = cd
 
@@ -3675,12 +3673,14 @@ func _handle_capture(captured: Dictionary, captured_pos: Vector2i, attacker_side
 	# 恋人(进阶):仅四人模式,每被吃 3 子,随机摧毁敌方 5 子
 	if four_mode and perks_of(victim_side).has("lianren2") and revive_count[victim_side] % 3 == 0:
 		_destroy_random_enemy(victim_side, 5)
-	# 皇后:己方每被吃 1 子,充能 +1(上限 1)
+	# 皇后:己方每被吃 1 子,充能 +1(上限 1;逆位力量可累计至 3 倍)
+	var queen_cap := 3 if perks_of(victim_side).has("liliang2") else 1
 	if perks_of(victim_side).has("huanghou") or perks_of(victim_side).has("huanghou2"):
-		queen_charge[victim_side] = mini(queen_charge[victim_side] + 1, 1)
-	# 死亡:己方每被吃 1 子,充能 +1(上限 3)
+		queen_charge[victim_side] = mini(queen_charge[victim_side] + 1, queen_cap)
+	# 死亡:己方每被吃 1 子,充能 +1(上限 3;逆位力量可累计至 3 倍)
+	var siwang_cap := 9 if perks_of(victim_side).has("liliang2") else 3
 	if perks_of(victim_side).has("siwang") or perks_of(victim_side).has("siwang2"):
-		siwang_charge[victim_side] = mini(siwang_charge[victim_side] + 1, 3)
+		siwang_charge[victim_side] = mini(siwang_charge[victim_side] + 1, siwang_cap)
 
 
 # 恋人(进阶):随机摧毁对方 n 枚棋子(将帅除外)
@@ -4300,12 +4300,14 @@ func _add_perk_cards(box: VBoxContainer, side_id: int, is_self: bool) -> void:
 			continue
 		var info: Dictionary = perks_data[id]
 		var tip: String = info.get("tip", "")
-		# 充能进度:皇后/死亡用充能值,星星逆位显示蓄势,主动技能显示剩余冷却
+		# 充能进度:皇后/死亡用充能值(逆位力量可累计至3倍上限),星星逆位显示蓄势,主动技能显示剩余冷却
 		var prog := ""
 		if id == "huanghou":
-			prog = "充能 %d/1" % queen_charge[side_id]
+			var qcap := 3 if perks_of(side_id).has("liliang2") else 1
+			prog = "充能 %d/%d" % [queen_charge[side_id], qcap]
 		elif id == "siwang":
-			prog = "充能 %d/3" % siwang_charge[side_id]
+			var scap := 9 if perks_of(side_id).has("liliang2") else 3
+			prog = "充能 %d/%d" % [siwang_charge[side_id], scap]
 		elif id == "xingxing2":
 			prog = "蓄势 %d" % star2_charge.get(side_id, 0)
 		if _is_active_skill(id) and prog.is_empty():
@@ -4386,9 +4388,7 @@ func _apply_skill_cd(perk_id: String, side: int) -> void:
 		return
 	if perks_of(side).has("liliang"):
 		cd = maxi(cd - 2, 0)  # 力量:我方主动技能冷却-2
-	# 力量逆位:敌方技能冷却+2(敌方有力量逆位时)
-	if 1 - side >= 0 and perks_of(1 - side).has("liliang2"):
-		cd += 2
+	# 注:逆位力量已改为"充能可累计至3倍上限",不再影响敌方冷却
 	if cd > 0:
 		skill_cd[side][perk_id] = cd
 
@@ -6361,11 +6361,13 @@ func _handle_capture4(captured: Dictionary, captured_pos: Vector2i, attacker_sid
 		_revive_piece4(victim_side)
 	if perks4[victim_side].has("lianren2") and revive_count4[victim_side] % 3 == 0:
 		_destroy_random_enemy4(victim_side, 5)
-	# 皇后/死亡:被吃充能(皇后上限 1)
+	# 皇后/死亡:被吃充能(皇后上限 1;逆位力量可累计至 3 倍)
+	var queen_cap4 := 3 if perks4[victim_side].has("liliang2") else 1
 	if perks4[victim_side].has("huanghou") or perks4[victim_side].has("huanghou2"):
-		queen_charge4[victim_side] = mini(queen_charge4[victim_side] + 1, 1)
+		queen_charge4[victim_side] = mini(queen_charge4[victim_side] + 1, queen_cap4)
+	var siwang_cap4 := 9 if perks4[victim_side].has("liliang2") else 3
 	if perks4[victim_side].has("siwang") or perks4[victim_side].has("siwang2"):
-		siwang_charge4[victim_side] = mini(siwang_charge4[victim_side] + 1, 3)
+		siwang_charge4[victim_side] = mini(siwang_charge4[victim_side] + 1, siwang_cap4)
 
 
 func _revive_piece4(side: int) -> void:

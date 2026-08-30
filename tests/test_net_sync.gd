@@ -740,7 +740,7 @@ func _run() -> void:
 	_check(scene.board[5][5] != null and scene.board[5][5]["type"] == R.Type.CANNON, "指令(四人):place 放置炮")
 	scene.four_mode = false
 
-	# --- 力量:我方主动技能冷却-2;力量逆位:敌方技能冷却+2 ---
+	# --- 力量:我方主动技能冷却-2;力量逆位:充能可累计至3倍上限(不再影响敌方冷却) ---
 	scene.net_role = "host"
 	scene.phase = scene.Phase.PLAY
 	scene.board = R.make_board()
@@ -752,27 +752,46 @@ func _run() -> void:
 	scene.perks_black = {}
 	scene._apply_skill_cd("nvjisi", R.Side.RED)
 	_check(scene.skill_cd[R.Side.RED].get("nvjisi", -1) == 1, "力量:我方主动技能冷却-2(3→1)")
-	# 力量逆位:黑方有,红方释放女祭司冷却3+2=5
+	# 力量逆位:不再影响敌方冷却(女祭司冷却保持 3)
 	scene.skill_cd = {0: {}, 1: {}}
 	scene.perks_red = {}
 	scene.perks_black = {"liliang2": true}
 	scene._apply_skill_cd("nvjisi", R.Side.RED)
-	_check(scene.skill_cd[R.Side.RED].get("nvjisi", -1) == 5, "力量逆位:敌方技能冷却+2(3→5)")
-	# 四人:力量逆位任意其他方
+	_check(scene.skill_cd[R.Side.RED].get("nvjisi", -1) == 3, "力量逆位:不再影响敌方冷却(仍为3)")
+	# 力量逆位:己方充能可累计至3倍上限(皇后 1→3,死亡 3→9)
+	scene.perks_red = {"huanghou": true, "liliang2": true, "siwang": true}
+	scene.perks_black = {}
+	scene.queen_charge = {0: 0, 1: 0}
+	scene.siwang_charge = {0: 0, 1: 0}
+	var cap_victim := R.Side.RED
+	# 模拟连续被吃 5 次:皇后充能到 3 封顶,死亡充能到 5(上限9)
+	for i in 5:
+		scene._handle_capture({"side": cap_victim, "type": R.Type.PAWN, "pos": Vector2i(i, 0), "birth_pos": Vector2i(0, 6)}, Vector2i(i, 0), R.Side.BLACK)
+	_check(scene.queen_charge[cap_victim] == 3, "力量逆位:皇后充能累计至3倍上限(3)")
+	_check(scene.siwang_charge[cap_victim] == 5, "力量逆位:死亡充能超过原上限继续累计(5)")
+	# 无逆位力量时皇后上限仍为 1
+	scene.perks_red = {"huanghou": true, "siwang": true}
+	scene.queen_charge = {0: 0, 1: 0}
+	scene.siwang_charge = {0: 0, 1: 0}
+	for i in 3:
+		scene._handle_capture({"side": cap_victim, "type": R.Type.PAWN, "pos": Vector2i(i, 0), "birth_pos": Vector2i(0, 6)}, Vector2i(i, 0), R.Side.BLACK)
+	_check(scene.queen_charge[cap_victim] == 1, "无力量逆位:皇后充能上限仍为1")
+	_check(scene.siwang_charge[cap_victim] == 3, "无力量逆位:死亡充能上限仍为3")
+	# 四人:力量逆位使己方充能可累计至3倍上限
 	scene.four_mode = true
 	scene.board = R.make_board4()
-	scene.perks4 = {0: {"liliang": true}, 1: {}, 2: {"liliang2": true}, 3: {}}
+	scene.perks4 = {0: {"liliang": true}, 1: {}, 2: {"liliang2": true, "huanghou": true}, 3: {}}
 	scene.skill_cd4 = {0: {}, 1: {}, 2: {}, 3: {}}
-	scene._apply_skill_cd4("nvjisi", 1)  # 蓝方(1)释放,绿方(2)有力量逆位 → cd +2
-	_check(scene.skill_cd4[1].get("nvjisi", -1) == 5, "四人:力量逆位使敌方冷却+2(3→5)")
+	scene._apply_skill_cd4("nvjisi", 1)  # 蓝方(1)释放,绿方(2)有力量逆位 → 不再 +2,冷却 3
+	_check(scene.skill_cd4[1].get("nvjisi", -1) == 3, "四人:力量逆位不再使其他方冷却+2(仍为3)")
+	# 四人:绿方(2)皇后充能可累计至3
+	scene.queen_charge4 = {0: 0, 1: 0, 2: 0, 3: 0}
+	for i in 4:
+		scene._handle_capture4({"side": 2, "type": R.Type.PAWN, "pos": Vector2i(4 + i, 13), "birth_pos": Vector2i(0, 16)}, Vector2i(4 + i, 13), 0)
+	_check(scene.queen_charge4[2] == 3, "四人:力量逆位皇后充能累计至3倍上限(3)")
 	# 单独验证红方力量正位(清掉其它影响):红方(0)有力量正位,-2
 	scene.skill_cd4 = {0: {}, 1: {}, 2: {}, 3: {}}
-	scene._apply_skill_cd4("nvjisi", 0)  # 红方(0)也有力量正位,但绿方(2)力量逆位仍 +2 → 3-2+2=3
-	_check(scene.skill_cd4[0].get("nvjisi", -1) == 3, "四人:力量正位-2与逆位+2叠加(3→3)")
-	# 无逆位干扰的力量正位
-	scene.perks4 = {0: {"liliang": true}, 1: {}, 2: {}, 3: {}}
-	scene.skill_cd4 = {0: {}, 1: {}, 2: {}, 3: {}}
-	scene._apply_skill_cd4("nvjisi", 0)
+	scene._apply_skill_cd4("nvjisi", 0)  # 红方(0)有力量正位,-2 → 1
 	_check(scene.skill_cd4[0].get("nvjisi", -1) == 1, "四人:力量正位使己方冷却-2(3→1)")
 	scene.four_mode = false
 
