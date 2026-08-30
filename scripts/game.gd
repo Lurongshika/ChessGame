@@ -11,6 +11,7 @@ const BgLayer := preload("res://scripts/bg_layer.gd")
 const ChatPanel := preload("res://scripts/chat_panel.gd")
 const TarotTooltip := preload("res://scripts/tarot_tooltip.gd")
 const Tarot := preload("res://scripts/tarot.gd")
+const CARD3D_SH := preload("res://shaders/card_3d.gdshader")
 
 const CELL := 56
 # 棋盘在 1280×720 窗口中直接居中:中心 x=(1280-504)/2=388,中心 y=(720-560)/2=80
@@ -4495,46 +4496,98 @@ var _announce_tween: Tween
 
 
 func _show_skill_announce(perk_id: String, side: int) -> void:
+	# 技能使用播报:不再用文字,改为技能卡从上方 3D 旋转飞落至屏幕中央(先快后慢),
+	# 落地时 3D 偏转归零 → 爆彩色粒子 → shader 消失 → 缩小退场
 	if ui == null or _announce_root != null:
 		return
-	var nm: String = perks_data[perk_id]["name"] if perks_data.has(perk_id) else perk_id
-	var who: String
-	if four_mode:
-		who = SIDE_NAMES4[side]
-	else:
-		who = "红方" if side == R.Side.RED else "黑方"
+
 	var root := Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui.add_child(root)
 	_announce_root = root
-	var bg := ColorRect.new()
-	bg.color = Color(0.05, 0.05, 0.1, 0.35)
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(bg)
-	var label := _make_label("", 40, Color(1.0, 0.9, 0.35))
-	label.text = "%s 使用技能\n%s" % [who, nm]
-	label.position = Vector2(0, 260)
-	label.size = Vector2(1280, 140)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	root.add_child(label)
-	label.modulate.a = 0.0
-	label.scale = Vector2(0.8, 0.8)
-	label.pivot_offset = Vector2(640, 70)
+
+	# 飞卡(塔罗牌面 + fake_3D shader)
+	var w := 130.0
+	var h := Tarot.card_size(w).y
+	var fly := Control.new()
+	fly.size = Vector2(w, h)
+	fly.position = Vector2(640 - w / 2.0, -h - 40.0)  # 从屏幕上方外进入
+	var tex := TextureRect.new()
+	tex.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tex.texture = Tarot.texture(perk_id)
+	var mat := ShaderMaterial.new()
+	mat.shader = CARD3D_SH
+	mat.set_shader_parameter("rect_size", Vector2(w, h))
+	mat.set_shader_parameter("fov", 90.0)
+	var y0 := 65.0   # 起始 3D 偏转(绕 Y)
+	var x0 := -32.0  # 起始 3D 偏转(绕 X)
+	mat.set_shader_parameter("y_rot", y0)
+	mat.set_shader_parameter("x_rot", x0)
+	tex.material = mat
+	fly.add_child(tex)
+	fly.pivot_offset = Vector2(w, h) / 2.0
+	root.add_child(fly)
+
+	var center := Vector2(640 - w / 2.0, 360 - h / 2.0)  # 屏幕中央
+	var fall := 0.85
+	var ease := Tween.EASE_OUT
 	var tw := create_tween()
-	tw.tween_property(label, "modulate:a", 1.0, 0.25)
-	tw.parallel().tween_property(label, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_interval(1.1)
-	tw.tween_property(label, "modulate:a", 0.0, 0.4)
+	# 从天而降:先快后慢
+	tw.tween_property(fly, "position", center, fall).set_trans(Tween.TRANS_CUBIC).set_ease(ease)
+	# 下落过程中 3D 旋转,落地时偏转恰好回归 0(无偏转)
+	tw.parallel().tween_method(func(v: float): mat.set_shader_parameter("y_rot", v), y0, 0.0, fall).set_trans(Tween.TRANS_CUBIC).set_ease(ease)
+	tw.parallel().tween_method(func(v: float): mat.set_shader_parameter("x_rot", v), x0, 0.0, fall).set_trans(Tween.TRANS_CUBIC).set_ease(ease)
+	tw.parallel().tween_property(fly, "scale", Vector2(1.08, 1.08), fall).set_trans(Tween.TRANS_CUBIC).set_ease(ease)
+	# 落地:爆彩色粒子 + 缩小退场
 	tw.tween_callback(func():
-		if root != null and is_instance_valid(root):
-			root.queue_free()
-		if _announce_root == root:
-			_announce_root = null
+		# shader 已归零(平面),爆彩色粒子
+		_burst_particles(Vector2(640, 360))
+		var tw2 := create_tween()
+		tw2.tween_property(fly, "scale", Vector2(0.15, 0.15), 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+		tw2.parallel().tween_property(fly, "modulate:a", 0.0, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw2.tween_callback(func():
+			if root != null and is_instance_valid(root):
+				root.queue_free()
+			if _announce_root == root:
+				_announce_root = null
+		)
 	)
 	_announce_tween = tw
+
+
+# 技能落地彩色粒子爆发(彩虹)
+func _burst_particles(pos: Vector2) -> void:
+	if not is_instance_valid(self):
+		return
+	var p := CPUParticles2D.new()
+	p.position = pos
+	p.one_shot = true
+	p.emitting = true
+	p.amount = 52
+	p.lifetime = 0.8
+	p.explosiveness = 1.0
+	p.direction = Vector2(0, -1)
+	p.spread = 180.0
+	p.gravity = Vector2(0, 330.0)
+	p.initial_velocity_min = 110.0
+	p.initial_velocity_max = 280.0
+	p.scale_amount_min = 2.0
+	p.scale_amount_max = 5.5
+	var g := Gradient.new()
+	g.set_color(0, Color(1, 0.25, 0.25))
+	g.set_color(0.2, Color(1, 0.65, 0.2))
+	g.set_color(0.4, Color(1, 1, 0.3))
+	g.set_color(0.6, Color(0.3, 1, 0.45))
+	g.set_color(0.8, Color(0.3, 0.65, 1))
+	g.set_color(1.0, Color(0.7, 0.3, 1))
+	p.color_ramp = g
+	add_child(p)
+	get_tree().create_timer(1.4).timeout.connect(func():
+		if is_instance_valid(p):
+			p.queue_free()
+	)
 
 
 func _activate_skill(perk_id: String, side: int) -> void:
