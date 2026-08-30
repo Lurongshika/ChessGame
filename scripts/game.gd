@@ -67,6 +67,7 @@ var invincible_piece_turns := 0    # 皇帝:无敌剩余回合数(移动后递�
 var counter_side := -1          # 皇后(进阶):反制方(该方棋子被吃时同归于尽)
 var siwang_charge := {0: 0, 1: 0}  # 死亡:被吃充能(己方每被吃 1 子 +1)
 var poison_map := {}              # 中毒:pos -> 剩余回合(到期自动摧毁;移动解毒)
+var _poison_fresh := {}           # 本回合刚中毒的 pos,回合结束时跳过一次递减(避免移动回合立即递减)
 var death2_poison_active := false  # 死亡逆位:下回合移动的非己方子中毒
 var death2_poison_caster := -1
 var lianren2_charge := {0: 0, 1: 0}  # 恋人逆位:被吃充能(需求2,使用后其他技能完成冷却/充能)
@@ -111,6 +112,7 @@ var invincible_piece_turns4 := 0  # 四人:皇帝无敌剩余回合数
 var counter_side4 := -1
 var siwang_charge4 := {0: 0, 1: 0, 2: 0, 3: 0}
 var poison_map4 := {}              # 四人:pos -> 剩余回合(到期摧毁,移动解毒)
+var _poison_fresh4 := {}           # 四人:本回合刚中毒,结束回合跳过一次递减
 var death2_poison_active4 := false  # 四人:死亡逆位下回合移动中毒
 var death2_poison_caster4 := -1
 var lianren2_charge4 := {0: 0, 1: 0, 2: 0, 3: 0}  # 四人:恋人逆位被吃充能(需求2)
@@ -1988,6 +1990,11 @@ func _side_from_name(s: String) -> int:
 
 func _side_name(side: int) -> String:
 	if four_mode:
+		# 优先玩家名,否则棋子颜色
+		var info: Dictionary = Global.lobby_players.get(side, {})
+		var nm: String = str(info.get("name", ""))
+		if nm != "" and not bool(info.get("is_ai", false)):
+			return nm
 		return SIDE_NAMES4.get(side, "方")
 	return "红方" if side == R.Side.RED else "黑方"
 
@@ -3724,6 +3731,7 @@ func _perform_move(from: Vector2i, to: Vector2i) -> void:
 		poison_map.erase(from)
 	if death2_poison_active and mover_side != death2_poison_caster:
 		poison_map[to] = 3
+		_poison_fresh[to] = true
 	selected = Vector2i(-1, -1)
 	moves_cache = []
 	free_retreat_targets = []
@@ -4044,6 +4052,7 @@ func _end_turn() -> void:
 # 中毒计时:己方被中毒的棋子到期(剩余0)自动摧毁
 func _tick_poison(side: int) -> void:
 	if poison_map.is_empty():
+		_poison_fresh.clear()
 		return
 	var gone: Array = []
 	for pos in poison_map.keys():
@@ -4053,12 +4062,15 @@ func _tick_poison(side: int) -> void:
 			continue
 		if p["side"] != side:
 			continue  # 非本方棋子,不在本方回合计时(在其所属方回合计时)
+		if _poison_fresh.has(pos):
+			continue  # 本回合刚中毒,跳过本次递减(给完整 N 回合)
 		poison_map[pos] = int(poison_map[pos]) - 1
 		if poison_map[pos] <= 0:
 			board[pos.y][pos.x] = null  # 毒发摧毁
 			gone.append(pos)
 	for pos in gone:
 		poison_map.erase(pos)
+	_poison_fresh.clear()
 
 
 # ==================== 存档 ====================
@@ -5926,7 +5938,7 @@ const ORIGIN4 := Vector2(351, 71)  # 17×17×34=578,居中
 const GRID4 := 17
 const CENTER4 := 4
 const SIDE_ORDER4 := [1, 3, 0, 2]  # 黑→蓝→红→绿
-const SIDE_NAMES4 := {0: "红方(下)", 1: "黑方(上)", 2: "绿方(左)", 3: "蓝方(右)"}
+const SIDE_NAMES4 := {0: "红方", 1: "黑方", 2: "绿方", 3: "蓝方"}
 
 var _piece_tex4: ImageTexture
 var _view_rot4 := 0   # 四人联机:本机视角旋转(0=红下,1=黑上180°,2=绿左90°CW,3=蓝右270°CW)
@@ -6447,6 +6459,7 @@ func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 		poison_map4.erase(from)
 	if death2_poison_active4 and side != death2_poison_caster4:
 		poison_map4[to] = 3
+		_poison_fresh4[to] = true
 	# 移动动画:记录起点/终点像素
 	_move_anims.append({
 		"piece": mover,
@@ -7034,6 +7047,7 @@ func _end_turn4() -> void:
 # 四人中毒计时:到期自动摧毁
 func _tick_poison4(side: int) -> void:
 	if poison_map4.is_empty():
+		_poison_fresh4.clear()
 		return
 	var gone: Array = []
 	for pos in poison_map4.keys():
@@ -7043,12 +7057,15 @@ func _tick_poison4(side: int) -> void:
 			continue
 		if p["side"] != side:
 			continue
+		if _poison_fresh4.has(pos):
+			continue
 		poison_map4[pos] = int(poison_map4[pos]) - 1
 		if poison_map4[pos] <= 0:
 			board[pos.y][pos.x] = null
 			gone.append(pos)
 	for pos in gone:
 		poison_map4.erase(pos)
+	_poison_fresh4.clear()
 
 
 func _next_alive4(side: int) -> int:
