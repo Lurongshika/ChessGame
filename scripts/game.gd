@@ -4516,8 +4516,8 @@ func _show_skill_announce(perk_id: String, side: int) -> void:
 	ui.add_child(root)
 	_announce_root = root
 
-	# 飞卡(Sprite2D 默认中心为原点,位置即卡牌中心;缩小到 1/4;card_fly 纯透视倾斜)
-	var w := 32.5
+	# 飞卡(Sprite2D 默认中心为原点,位置即卡牌中心;放大 2.5 倍;card_fly 纯透视倾斜)
+	var w := 81.25
 	var h := Tarot.card_size(w).y
 	var base_scale := Vector2(w / 408.0, h / 632.0)
 	var spr := Sprite2D.new()
