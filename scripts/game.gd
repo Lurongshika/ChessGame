@@ -206,6 +206,11 @@ var record_box: VBoxContainer
 var record_visible := false
 var _lobby_ready_done := false  # 大厅→对局:客户端已进入 game 场景(防重复开局)
 
+# 送吃/不解将确认悬浮窗
+var _self_check_root: Control
+var _self_check_from := Vector2i(-1, -1)
+var _self_check_to := Vector2i(-1, -1)
+
 # 玩家徽章(左下我方 / 右上敌方)
 var my_badge_icon: TextureRect
 var my_badge_name: Label
@@ -2749,7 +2754,7 @@ func on_move(from: Vector2i, to: Vector2i, kind: String) -> void:
 		_perform_move(from, to)
 
 
-func _try_perform(from: Vector2i, to: Vector2i, kind: String) -> void:
+func _try_perform(from: Vector2i, to: Vector2i, kind: String, skip_check: bool = false) -> void:
 	# 本地:直接应用;主机:校验后广播;客户端:发请求等主机广播
 	if net_role == "local":
 		if kind == "free_retreat":
@@ -2759,7 +2764,7 @@ func _try_perform(from: Vector2i, to: Vector2i, kind: String) -> void:
 		else:
 			_perform_move(from, to)
 	elif net_role == "host":
-		if not _validate_move(from, to, kind, R.Side.RED):
+		if not _validate_move(from, to, kind, R.Side.RED, skip_check):
 			return
 		on_move.rpc(from, to, kind)
 	else:
@@ -2767,7 +2772,71 @@ func _try_perform(from: Vector2i, to: Vector2i, kind: String) -> void:
 		_clear_selection()
 
 
-func _validate_move(from: Vector2i, to: Vector2i, kind: String, side: int) -> bool:
+# 该着法是否为"送吃/不解将"(走后己方王被将,且非吃敌王):用于弹确认
+func _is_self_check_move(from: Vector2i, to: Vector2i, side: int) -> bool:
+	var ok_dest: bool = (to in R.raw_moves(board, from, perks_red, perks_black)) or (to in _chariot_boost_moves(from, side))
+	if not ok_dest:
+		return false
+	var target = board[to.y][to.x]
+	if target != null and target["type"] == R.Type.KING and target["side"] != side:
+		return false  # 吃敌王不算送吃
+	var res := R.apply_move(board, from, to)
+	return R.is_in_check(res["board"], side, perks_red, perks_black)
+
+
+# 送吃/不解将:弹悬浮窗确认,确认后跳过将军校验执行
+func _ask_self_check(from: Vector2i, to: Vector2i) -> void:
+	_self_check_from = from
+	_self_check_to = to
+	if _self_check_root != null:
+		_self_check_root.queue_free()
+	_self_check_root = Control.new()
+	_self_check_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	ui.add_child(_self_check_root)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.62)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_self_check_root.add_child(dim)
+
+	var box := Panel.new()
+	box.position = Vector2(1280 / 2 - 230, 720 / 2 - 95)
+	box.size = Vector2(460, 190)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.11, 0.12, 0.17, 0.98)
+	sb.border_color = Color(0.9, 0.6, 0.3)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(10)
+	box.add_theme_stylebox_override("panel", sb)
+	_self_check_root.add_child(box)
+
+	var label := _make_label("这一步会让己方王被将军\n(送吃 / 不解将),确定要下吗?", 18, Color(1.0, 0.88, 0.6))
+	label.position = Vector2(24, 22)
+	label.size = Vector2(412, 80)
+	label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	box.add_child(label)
+
+	var ok := _make_button("确定", Vector2(1280 / 2 - 230 + 40, 720 / 2 - 95 + 126), Vector2(170, 44))
+	ok.pressed.connect(_confirm_self_check.bind(true))
+	box.add_child(ok)
+	var cancel := _make_button("取消", Vector2(1280 / 2 - 230 + 250, 720 / 2 - 95 + 126), Vector2(170, 44))
+	cancel.pressed.connect(_confirm_self_check.bind(false))
+	box.add_child(cancel)
+	Global.pop_in_layer(_self_check_root)
+
+
+func _confirm_self_check(confirmed: bool) -> void:
+	if _self_check_root != null:
+		_self_check_root.queue_free()
+		_self_check_root = null
+	if confirmed and _self_check_to.x >= 0:
+		# 送吃走法:跳过将军校验执行
+		_try_perform(_self_check_from, _self_check_to, "move", true)
+	_self_check_from = Vector2i(-1, -1)
+	_self_check_to = Vector2i(-1, -1)
+
+
+func _validate_move(from: Vector2i, to: Vector2i, kind: String, side: int, skip_check: bool = false) -> bool:
 	var p = board[from.y][from.x]
 	if p == null or side != turn:
 		return false
@@ -2790,7 +2859,9 @@ func _validate_move(from: Vector2i, to: Vector2i, kind: String, side: int) -> bo
 	if from in _sync_moved:
 		return false
 	if kind == "move":
-		var in_legal: bool = to in R.legal_moves(board, from, perks_red, perks_black)
+		# skip_check=true(送吃确认后)时用 raw_moves,允许走后己方王被将的着法
+		var dests: Array = R.raw_moves(board, from, perks_red, perks_black) if skip_check else R.legal_moves(board, from, perks_red, perks_black)
+		var in_legal: bool = to in dests
 		# 战车(被动·整局):与车相邻的棋子可落至车的可落位;选中车时可落至相邻子(含敌方)的可落位
 		if not in_legal:
 			in_legal = to in _chariot_boost_moves(from, side)
@@ -5268,6 +5339,10 @@ func _handle_click(pos: Vector2i) -> void:
 		return
 	if pos in moves_cache:
 		_try_perform(selected, pos, "move")
+		return
+	# 送吃/不解将:走后己方王被将,弹悬浮窗确认(仅人类玩家操作时)
+	if _is_self_check_move(selected, pos, turn):
+		_ask_self_check(selected, pos)
 		return
 	if can_operate:
 		_select(pos)
