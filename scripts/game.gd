@@ -2491,6 +2491,10 @@ func _apply_state_data(data: Dictionary) -> void:
 		_refresh_move_log()
 	_update_ui()
 	queue_redraw()
+	# 观战者:收到首个对局状态后移除"等待主机"提示
+	if _spectator and net_wait_label != null:
+		net_wait_label.queue_free()
+		net_wait_label = null
 
 
 # 主机把完整状态广播给客户端(客户端本地用广播覆盖,保证双方棋子一致)
@@ -7436,6 +7440,10 @@ func _apply_state_data4(data: Dictionary) -> void:
 	_update_status4()
 	_refresh_check4()
 	queue_redraw()
+	# 观战者:收到首个对局状态后移除"等待主机"提示
+	if _spectator and net_wait_label != null:
+		net_wait_label.queue_free()
+		net_wait_label = null
 	# 四人:对局结束(有胜者)时显示结算,所有端一致(含客户端收到广播后)
 	if winner4 >= 0:
 		_show_four_result()

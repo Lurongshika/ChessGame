@@ -318,8 +318,13 @@ func _apply_players(data: Dictionary) -> void:
 			Global.my_color = int(p["color"])
 	# 更新准备按钮文本(加入方)
 	if start_btn != null and Global.net_role != "host":
-		var my_ready: bool = bool(players.get(my_peer, {}).get("ready", false))
-		start_btn.text = "取消准备" if my_ready else "准备"
+		if spectators.has(my_peer):
+			# 观战者不显示准备/开始按钮
+			start_btn.visible = false
+		else:
+			start_btn.visible = true
+			var my_ready: bool = bool(players.get(my_peer, {}).get("ready", false))
+			start_btn.text = "取消准备" if my_ready else "准备"
 
 
 func _pick_color(idx: int) -> void:
