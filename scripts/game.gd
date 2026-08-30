@@ -3101,6 +3101,7 @@ func _update_draft_ui() -> void:
 			var card := PerkCard.new()
 			var is_sel: bool = id in picked
 			card.setup(id, cur_side, info["name"], info.get("tip", ""), info["desc"], _font(), true, 110.0, _tip)
+			card.idle_float = true
 			card.position = Vector2(399 + (i % 4) * 124, 150 + (i / 4) * 187)
 			card.size = Tarot.card_size(110.0)
 			card.set_selected(is_sel)
@@ -3141,6 +3142,7 @@ func _update_draft_ui() -> void:
 		var info: Dictionary = perks_data[id]
 		var card := PerkCard.new()
 		card.setup(id, cur_side, info["name"], info.get("tip", ""), info["desc"], _font(), true, 190.0, _tip)
+		card.idle_float = true
 		card.position = Vector2(339 + i * 202, 180)
 		card.size = Tarot.card_size(190.0)
 		card.clicked.connect(func(pid: String, _s: int):

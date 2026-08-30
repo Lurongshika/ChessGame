@@ -10,12 +10,14 @@ const Tarot := preload("res://scripts/tarot.gd")
 
 const CARD3D := preload("res://shaders/card_3d.gdshader")
 const MAX_TILT := 11.0        # 悬浮偏转最大角度(度,限制为原一半)
-const FLOAT_LIFT := 14.0      # 选中浮动上移量(像素)
-const FLOAT_BOB := 3.0        # 选中浮动上下摆幅(像素)
+const IDLE_SWAY := 6.0        # 选牌界面所有卡牌基础倾斜摆动(度)
+const IDLE_BOB := 5.0         # 选牌界面所有卡牌基础上下漂浮(像素)
+const SEL_LIFT := 8.0         # 选中额外上浮(像素)
 
 var perk_id := ""
 var _side := -1
 var selected := false
+var idle_float := false       # 选牌界面:所有卡牌持续飘动(摆动+漂浮),选中再叠 shader
 var bg_tint := Color(-1, -1, -1)  # 自定义边框色(四人模式玩家色,-1 表示用默认)
 var _tooltip: Control              # 共享悬浮提示(可空)
 var _title := ""
@@ -77,13 +79,23 @@ func _process(delta: float) -> void:
 	if _mat == null:
 		return
 	_mat.set_shader_parameter("rect_size", size)
-	_mat.set_shader_parameter("time", Time.get_ticks_msec() / 1000.0)
+	var t := Time.get_ticks_msec() / 1000.0
+	_mat.set_shader_parameter("time", t)
 
-	# 悬停:按鼠标相对卡牌中心偏移计算目标旋转角(朝鼠标方向偏转)
+	# 选牌界面:所有卡牌持续飘动(相位按卡牌索引错开,参考 balatro-feel)
+	var ph := 0.0
+	if idle_float:
+		ph = float(get_index())
+
+	# 目标旋转角
 	var target_rx := 0.0
 	var target_ry := 0.0
 	var target_scale := 1.0
+	if idle_float:
+		target_rx = sin(t * 2.0 + ph) * IDLE_SWAY
+		target_ry = cos(t * 2.0 + ph) * IDLE_SWAY
 	if _hover:
+		# 悬停:叠加朝鼠标倾斜(减小飘动),并放大
 		var local := get_local_mouse_position()
 		var z := size
 		if z.x <= 0.0 or z.y <= 0.0:
@@ -92,8 +104,9 @@ func _process(delta: float) -> void:
 		var off := (frac - Vector2(0.5, 0.5)) * 2.0
 		off.x = clampf(off.x, -1.0, 1.0)
 		off.y = clampf(off.y, -1.0, 1.0)
-		target_rx = off.y * MAX_TILT
-		target_ry = -off.x * MAX_TILT
+		var reduce := 0.3 if idle_float else 1.0
+		target_rx = off.y * MAX_TILT + (sin(t * 2.0 + ph) * IDLE_SWAY * reduce * 0.3)
+		target_ry = -off.x * MAX_TILT + (cos(t * 2.0 + ph) * IDLE_SWAY * reduce * 0.3)
 		target_scale = 1.12
 
 	var k := minf(delta * 10.0, 1.0)
@@ -106,14 +119,15 @@ func _process(delta: float) -> void:
 	pivot_offset = size / 2.0
 	scale = Vector2(_curr_scale, _curr_scale)
 
-	# 选中浮动:卡牌上浮 + 轻微上下漂浮(初始槽位为基准)
+	# 上下漂浮:选牌界面所有卡牌上飘摆动;选中额外上浮(初始槽位为基准)
 	if not _base_captured and size != Vector2.ZERO:
 		_base_pos = position
 		_base_captured = true
 	var target_y := _base_pos.y
+	if idle_float:
+		target_y = _base_pos.y + sin(t * 1.5 + ph) * IDLE_BOB
 	if selected:
-		var t := Time.get_ticks_msec() / 1000.0
-		target_y = _base_pos.y - FLOAT_LIFT + sin(t * 3.0) * FLOAT_BOB
+		target_y = _base_pos.y - SEL_LIFT + (sin(t * 1.5 + ph) * IDLE_BOB if idle_float else 0.0)
 	position.y = lerpf(position.y, target_y, k)
 	position.x = _base_pos.x
 
