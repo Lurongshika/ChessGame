@@ -4565,33 +4565,32 @@ func _show_skill_announce(perk_id: String, side: int) -> void:
 func _burst_particles(pos: Vector2) -> void:
 	if not is_instance_valid(self):
 		return
-	var p := CPUParticles2D.new()
-	p.position = pos
-	p.one_shot = true
-	p.emitting = true
-	p.amount = 52
-	p.lifetime = 0.8
-	p.explosiveness = 1.0
-	p.direction = Vector2(0, -1)
-	p.spread = 180.0
-	p.gravity = Vector2(0, 330.0)
-	p.initial_velocity_min = 110.0
-	p.initial_velocity_max = 280.0
-	p.scale_amount_min = 2.0
-	p.scale_amount_max = 5.5
-	var g := Gradient.new()
-	g.set_color(0, Color(1, 0.25, 0.25))
-	g.set_color(0.2, Color(1, 0.65, 0.2))
-	g.set_color(0.4, Color(1, 1, 0.3))
-	g.set_color(0.6, Color(0.3, 1, 0.45))
-	g.set_color(0.8, Color(0.3, 0.65, 1))
-	g.set_color(1.0, Color(0.7, 0.3, 1))
-	p.color_ramp = g
-	add_child(p)
-	get_tree().create_timer(1.4).timeout.connect(func():
-		if is_instance_valid(p):
-			p.queue_free()
-	)
+	# 同时喷发多种颜色的粒子(每色一小群,同时出现不同颜色),而非渐变色
+	var colors := [
+		Color(1.0, 0.25, 0.25), Color(1.0, 0.62, 0.2), Color(1.0, 1.0, 0.3),
+		Color(0.3, 1.0, 0.45), Color(0.3, 0.65, 1.0), Color(0.7, 0.3, 1.0),
+	]
+	for ci in colors.size():
+		var p := CPUParticles2D.new()
+		p.position = pos
+		p.one_shot = true
+		p.emitting = true
+		p.amount = 8
+		p.lifetime = 0.8
+		p.explosiveness = 1.0
+		p.direction = Vector2(0, -1)
+		p.spread = 180.0
+		p.gravity = Vector2(0, 330.0)
+		p.initial_velocity_min = 110.0
+		p.initial_velocity_max = 280.0
+		p.scale_amount_min = 2.0
+		p.scale_amount_max = 5.5
+		p.color = colors[ci]
+		add_child(p)
+		get_tree().create_timer(1.4).timeout.connect(func():
+			if is_instance_valid(p):
+				p.queue_free()
+		)
 
 
 func _activate_skill(perk_id: String, side: int) -> void:
