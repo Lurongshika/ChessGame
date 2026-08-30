@@ -4565,7 +4565,7 @@ func _show_skill_announce(perk_id: String, side: int) -> void:
 func _burst_particles(pos: Vector2) -> void:
 	if not is_instance_valid(self):
 		return
-	# 同时喷发多种颜色的粒子(每色一小群,同时出现不同颜色),而非渐变色
+	# 同时喷发多种颜色的粒子(每色一群,同时出现不同颜色);大小不一、无重力、四周飘散、速度渐降、半透明、量大
 	var colors := [
 		Color(1.0, 0.25, 0.25), Color(1.0, 0.62, 0.2), Color(1.0, 1.0, 0.3),
 		Color(0.3, 1.0, 0.45), Color(0.3, 0.65, 1.0), Color(0.7, 0.3, 1.0),
@@ -4575,19 +4575,22 @@ func _burst_particles(pos: Vector2) -> void:
 		p.position = pos
 		p.one_shot = true
 		p.emitting = true
-		p.amount = 8
-		p.lifetime = 0.8
+		p.amount = 26
+		p.lifetime = 1.0
 		p.explosiveness = 1.0
 		p.direction = Vector2(0, -1)
-		p.spread = 180.0
-		p.gravity = Vector2(0, 330.0)
-		p.initial_velocity_min = 110.0
-		p.initial_velocity_max = 280.0
-		p.scale_amount_min = 2.0
-		p.scale_amount_max = 5.5
-		p.color = colors[ci]
+		p.spread = 180.0          # 向四周飘散
+		p.gravity = Vector2.ZERO   # 无重力
+		p.damping_min = 120.0
+		p.damping_max = 280.0      # 速度逐渐下降(阻尼)
+		p.initial_velocity_min = 130.0
+		p.initial_velocity_max = 360.0
+		p.scale_amount_min = 1.0
+		p.scale_amount_max = 12.0  # 大小不一
+		var c: Color = colors[ci]
+		p.color = Color(c.r, c.g, c.b, 0.55)  # 半透明
 		add_child(p)
-		get_tree().create_timer(1.4).timeout.connect(func():
+		get_tree().create_timer(1.6).timeout.connect(func():
 			if is_instance_valid(p):
 				p.queue_free()
 		)
