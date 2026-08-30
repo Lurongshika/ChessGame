@@ -159,7 +159,9 @@ func _build_color_palette() -> void:
 
 func _net_init() -> void:
 	if Global.net_role == "host":
-		var max_clients: int = (2 if Global.game_mode != "four" else 4) - 1
+		# 玩家席位(主机+玩家)之外留出观战席名额,否则观战者无法连入
+		var player_cap: int = (2 if Global.game_mode != "four" else 4)
+		var max_clients: int = (player_cap - 1) + 6
 		# 端口被占用时自动 +1 尝试其他端口(最多 20 次)
 		var peer := ENetMultiplayerPeer.new()
 		var err := peer.create_server(Global.port, max_clients)
@@ -228,6 +230,14 @@ func send_profile(name: String, avatar_data: Dictionary) -> void:
 	if not multiplayer.is_server():
 		return
 	var pid := multiplayer.get_remote_sender_id()
+	var player_cap: int = (2 if Global.game_mode != "four" else 4)
+	# 玩家席位已满 → 该连接自动转为观战(不占席位)
+	if players.size() >= player_cap:
+		spectators[pid] = {"name": name, "avatar_data": avatar_data}
+		_update_ui()
+		sync_room_info.rpc(Global.game_mode, Global.standard_mode)
+		_sync_players.rpc(_players_to_data())
+		return
 	# 按加入顺序:已有人数作为序号(host=0)
 	var max_order := 0
 	for p2 in players:
