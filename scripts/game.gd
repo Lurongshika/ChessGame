@@ -368,24 +368,17 @@ func _build_ui() -> void:
 	# 对局记录:屏幕中心半透明悬浮窗(默认隐藏,下方按钮切换)
 	_build_record_panel()
 
-	# 浮动技能面板:可拖动/折叠/缩放,交互与系统窗口一致(先设位置尺寸再 setup)
-	# 我方技能悬浮框(上)——加宽,卡牌横向排列
-	self_panel = FloatingPanel.new()
-	self_panel.position = Vector2(836, 96)
-	self_panel.size = Vector2(432, 244)
-	self_panel.setup("我方技能", _font())
-	ui.add_child(self_panel)
+	# 技能卡不放悬浮框,改为横向排在各玩家头像旁:
+	# 敌方(右上)卡牌在头像下方,我方(左下)卡牌在头像上方(与四人模式一致)
+	self_perk_list_box = HBoxContainer.new()
+	self_perk_list_box.add_theme_constant_override("separation", 8)
+	self_perk_list_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui.add_child(self_perk_list_box)
 
-	self_perk_list_box = _make_scroll_list(self_panel)
-
-	# 敌方技能悬浮框(下)
-	enemy_panel = FloatingPanel.new()
-	enemy_panel.position = Vector2(836, 400)
-	enemy_panel.size = Vector2(432, 244)
-	enemy_panel.setup("敌方技能", _font())
-	ui.add_child(enemy_panel)
-
-	enemy_perk_list_box = _make_scroll_list(enemy_panel)
+	enemy_perk_list_box = HBoxContainer.new()
+	enemy_perk_list_box.add_theme_constant_override("separation", 8)
+	enemy_perk_list_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui.add_child(enemy_perk_list_box)
 
 	# 退出对局按钮:固定在游戏窗口右下角
 	# 图鉴演示对局:悔棋 / 撤销悔棋(右上角,退出按钮左侧)
@@ -4304,7 +4297,7 @@ func _update_ui() -> void:
 
 
 func _refresh_perk_panels() -> void:
-	# 我方技能面板 + 敌方技能面板 分开刷新
+	# 我方技能卡 + 敌方技能卡 分开刷新(横向排在各玩家头像旁)
 	# 注意:必须用 queue_free 而非 free —— 释放技能后回合切换会触发这里重建面板,
 	# 而当前点击的技能卡仍在处理 gui_input,直接 free 会报"locked object can't be freed"
 	if self_perk_list_box != null:
@@ -4313,11 +4306,25 @@ func _refresh_perk_panels() -> void:
 			self_perk_list_box.remove_child(child)
 			child.queue_free()
 		_add_perk_cards(self_perk_list_box, _self_side(), true)
+		_position_2p_row(self_perk_list_box, true)
 	if enemy_perk_list_box != null:
 		for child in enemy_perk_list_box.get_children():
 			enemy_perk_list_box.remove_child(child)
 			child.queue_free()
 		_add_perk_cards(enemy_perk_list_box, 1 - _self_side(), false)
+		_position_2p_row(enemy_perk_list_box, false)
+
+
+# 双人:我方(左下头像)卡牌在头像上方,敌方(右上头像)卡牌在头像下方,横向排布
+func _position_2p_row(row: HBoxContainer, is_self: bool) -> void:
+	if is_self:
+		# 左下头像在 (12, 652);卡牌在头像上方,自左向右延伸
+		var h := row.get_combined_minimum_size().y
+		row.position = Vector2(12, 652 - 6.0 - h)
+	else:
+		# 右上头像在 (1166, 4);卡牌在头像下方,右缘对齐向里延伸
+		var w := row.get_combined_minimum_size().x
+		row.position = Vector2(1270.0 - w, 88.0)
 
 
 func _self_side() -> int:
@@ -4358,7 +4365,7 @@ func _add_perk_cards(box: Container, side_id: int, is_self: bool) -> void:
 		if not prog.is_empty():
 			tip += "  [%s]" % prog
 		var card := PerkCard.new()
-		card.setup(id, side_id, info["name"], tip, info["desc"], _font(), is_self, 120.0, _tip)
+		card.setup(id, side_id, info["name"], tip, info["desc"], _font(), is_self, 110.0, _tip)
 		card.clicked.connect(_on_perk_clicked)
 		box.add_child(card)
 
