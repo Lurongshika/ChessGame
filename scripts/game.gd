@@ -2455,6 +2455,10 @@ func _apply_state_data(data: Dictionary) -> void:
 	selected = Vector2i(-1, -1)
 	moves_cache = []
 	free_retreat_targets = []
+	# 联机:每回合追踪以主机为准,客户端应用状态时清空本地"已移动/已控制"标记
+	_turn_moved = []
+	_controlled_moved = []
+	_sync_moved = []
 	# 对局记录同步:以主机 move_history 为准(含双方技能记录)
 	if data.has("move_history"):
 		move_history = _moves_from_json(data["move_history"])
@@ -7366,6 +7370,10 @@ func _apply_state_data4(data: Dictionary) -> void:
 			perks4[int(side_str)] = data["perks4"][side_str].duplicate()
 	selected4 = Vector2i(-1, -1)
 	moves4 = []
+	# 联机:每回合追踪以主机为准,客户端应用状态时清空本地"已移动/已控制"标记
+	_turn_moved4 = []
+	_controlled_moved4 = []
+	_sync_moved4 = []
 	# 对局记录同步:以主机 record4_history 为准(含双方技能使用)
 	if data.has("record4_history"):
 		_record4_history = []
