@@ -7221,6 +7221,8 @@ func _state_to_data4() -> Dictionary:
 		"death2_poison_caster4": death2_poison_caster4,
 		"sync_pieces4": _sync_pieces_to_data4(),
 		"controlled_turns4": controlled_turns4,
+		"controlled_all_turns4": controlled_all_turns4,
+		"controlled_all_owner4": controlled_all_owner4,
 		"control_foreign4": {"0": control_foreign4[0], "1": control_foreign4[1], "2": control_foreign4[2], "3": control_foreign4[3]},
 		"pope_guarded4": _pope_to_data4(),
 		"pope_countered4": _pope2_to_data4(),
@@ -7321,6 +7323,8 @@ func _apply_state_data4(data: Dictionary) -> void:
 	for q in data.get("sync_pieces4", []):
 		sync_pieces4.append(Vector2i(int(q[0]), int(q[1])))
 	controlled_turns4 = int(data.get("controlled_turns4", 0))
+	controlled_all_turns4 = int(data.get("controlled_all_turns4", 0))
+	controlled_all_owner4 = int(data.get("controlled_all_owner4", -1))
 	control_foreign4 = {
 		0: bool(data.get("control_foreign4", {}).get("0", false)),
 		1: bool(data.get("control_foreign4", {}).get("1", false)),
