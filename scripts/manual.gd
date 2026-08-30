@@ -1638,6 +1638,7 @@ func _build_list() -> void:
 		var info: Dictionary = perks[id]
 		var card := TarotCard.new()
 		card.setup(id, 0, info["name"], info.get("tip", ""), _full_desc(id), _font(), true, 100.0, _tip)
+		card.set_sel_lift(false)  # 图鉴选中卡保持原位,不浮起
 		card.set_meta("skill_id", id)
 		card.clicked.connect(func(_sid: String, _s: int): _select_skill(_sid))
 		grid.add_child(card)

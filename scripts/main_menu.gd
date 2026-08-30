@@ -352,13 +352,20 @@ func _animate_option_button(b: Button) -> void:
 	tw.parallel().tween_property(b, "position", orig_pos, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
-# 给创建/加入界面的直接按钮补动画(模式/人数/输入框等)
+# 给创建/加入界面的直接按钮补动画(模式/人数/输入框/标题等)
 func _animate_opt_extra_buttons(btns: Array) -> void:
 	for b in btns:
 		_animate_option_button(b)
-	# 输入框/滑块淡入
+	# 标题 Label、输入框、滑块依次淡入
+	var li := 0
 	for child in opt_root.get_children():
-		if child is LineEdit or child is HSlider:
+		if child is Label:
+			child.modulate.a = 0.0
+			var tw := create_tween()
+			tw.tween_interval(li * 0.05)
+			tw.tween_property(child, "modulate:a", 1.0, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			li += 1
+		elif child is LineEdit or child is HSlider:
 			child.modulate.a = 0.0
 			var tw := create_tween()
 			tw.tween_interval(0.1)

@@ -19,6 +19,7 @@ var perk_id := ""
 var _side := -1
 var selected := false
 var idle_float := false       # 选牌界面:所有卡牌持续飘动(摆动+漂浮),选中再叠 shader
+var _sel_lift := true         # 选中是否上浮(图鉴关闭,避免选中卡浮起)
 var _fan := 0.0               # 外倾角(度,按所在列位置设置:左端负、右端正、中间 0)
 var bg_tint := Color(-1, -1, -1)  # 自定义边框色(四人模式玩家色,-1 表示用默认)
 var _tooltip: Control              # 共享悬浮提示(可空)
@@ -129,7 +130,7 @@ func _process(delta: float) -> void:
 	var target_y := _base_pos.y
 	if idle_float:
 		target_y = _base_pos.y + sin(t * 1.5 + ph) * IDLE_BOB
-	if selected:
+	if selected and _sel_lift:
 		target_y = _base_pos.y - SEL_LIFT + (sin(t * 1.5 + ph) * IDLE_BOB if idle_float else 0.0)
 	position.y = lerpf(position.y, target_y, k)
 	position.x = _base_pos.x
@@ -180,6 +181,11 @@ func set_selected(v: bool) -> void:
 # 设置外倾角(度):左端传负、右端传正、中间传 0,形成扇形展开
 func set_fan(deg: float) -> void:
 	_fan = deg
+
+
+# 选中是否上浮(图鉴/浏览场景关闭,保持原位只高亮)
+func set_sel_lift(v: bool) -> void:
+	_sel_lift = v
 
 
 # 对局状态:ready=充能完毕闪箔流光,disabled=审判禁用红色,passive=被动卡青色(3 种 shader)

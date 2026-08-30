@@ -194,6 +194,7 @@ var enemy_perk_list_box: HBoxContainer
 var _four_perk_boxes: Array = []  # 四人模式:四方技能悬浮窗内容框
 var draft_root: Control
 var _draft_ui_shown := false  # 三选一界面是否已首次显示(首次弹入,刷新重建不重复)
+var _draft_counter_label: Label  # 八选三:技能选择 x/3 计数标签(原地切换选中时更新)
 var result_root: Control
 var four_result_root: Control  # 四人:结算遮罩(返回大厅)
 var net_wait_label: Label
@@ -3122,6 +3123,7 @@ func _update_draft_ui() -> void:
 		title4.size = Vector2(1280, 44)
 		title4.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		draft_root.add_child(title4)
+		_draft_counter_label = title4
 		for i in cur_opts.size():
 			var id: String = cur_opts[i]
 			var info: Dictionary = perks_data[id]
@@ -3133,15 +3135,21 @@ func _update_draft_ui() -> void:
 			card.position = Vector2(399 + (i % 4) * 124, 150 + (i / 4) * 187)
 			card.size = Tarot.card_size(110.0)
 			card.set_selected(is_sel)
-			card.clicked.connect(func(pid: String, _s: int):
+			# 原地切换选中/取消,不重建全部卡(避免其他牌"归位"造成卡顿)
+			card.clicked.connect(func(pid: String, _s: int, selfcard: Control = card):
+				var now_sel: bool
 				if pid in _draft_selected4:
 					_draft_selected4.erase(pid)
+					now_sel = false
 				else:
 					if _draft_selected4.size() >= 3:
 						_show_status4("最多选择 3 个技能")
 						return
 					_draft_selected4.append(pid)
-				_update_draft_ui()
+					now_sel = true
+				selfcard.set_selected(now_sel)
+				if _draft_counter_label != null and is_instance_valid(_draft_counter_label):
+					_draft_counter_label.text = "技能选择 %d/3" % _draft_selected4.size()
 			)
 			draft_root.add_child(card)
 		# 确认按钮
