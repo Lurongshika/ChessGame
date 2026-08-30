@@ -7154,19 +7154,25 @@ func _next_alive4(side: int) -> int:
 
 
 func _refresh_judgement4(side: int) -> void:
-	var target := _next_alive4(side)
-	disabled_skills4[target] = ""
-	# 审判逆位:被动效果(敌方不能以技能吃我方棋子),无每回合动作
+	# 审判逆位:被动效果(敌方不能以技能吃我方棋子),无每回合禁用
 	if not perks4[side].has("shenpan"):
+		for s2 in 4:
+			if s2 != side and alive4[s2]:
+				disabled_skills4[s2] = ""
 		return
-	var actives: Array = []
-	for id in perks4[target]:
-		if _is_active_skill(id):
-			actives.append(id)
-	if actives.is_empty():
-		return
-	disabled_skills4[target] = actives.pick_random()
-	_show_status4("审判:%s 的[%s]被禁用" %  [_side_display_name(target), perks_data[disabled_skills4[target]]["name"]])
+	# 正位:对每个非己方存活方禁用其一个随机主动技能
+	for s2 in 4:
+		if s2 == side or not alive4[s2]:
+			continue
+		disabled_skills4[s2] = ""
+		var actives: Array = []
+		for id in perks4[s2]:
+			if _is_active_skill(id):
+				actives.append(id)
+		if actives.is_empty():
+			continue
+		disabled_skills4[s2] = actives.pick_random()
+		_show_status4("审判:%s 的[%s]被禁用" %  [_side_display_name(s2), perks_data[disabled_skills4[s2]]["name"]])
 
 
 func _refresh_pope_guard4(side: int) -> void:
