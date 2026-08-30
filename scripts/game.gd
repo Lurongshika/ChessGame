@@ -6937,7 +6937,10 @@ func _begin_turn4() -> void:
 	if perks4[side].has("shijie"):
 		_apply_dice4(side, side)
 	if perks4[side].has("shijie2"):
-		_apply_dice4(side, _next_alive4(side))
+		# 逆位:作用于其他所有存活方(4p 混战,不只下一个)
+		for s2 in 4:
+			if s2 != side and alive4[s2]:
+				_apply_dice4(side, s2)
 	# 注:隐者隐身/皇后无敌/皇帝无敌/皇后逆位反制等"持续一回合"效果,改为己方移动后清除(见 _move4)
 	sync_pieces4 = []
 	_sync_moved4 = []
