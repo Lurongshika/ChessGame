@@ -1619,10 +1619,14 @@ func _ready() -> void:
 	right_btn.pressed.connect(_start_demo)
 	add_child(right_btn)
 
-	# 塔罗牌技能信息悬浮提示(共享,顶层)
+	# 塔罗牌技能信息悬浮提示(共享,挂在最高层,始终在最上)
 	_tip = TarotTooltip.new()
 	_tip.setup(_font())
-	add_child(_tip)
+	_tip.z_index = 100
+	var tip_layer := CanvasLayer.new()
+	tip_layer.layer = 60
+	add_child(tip_layer)
+	tip_layer.add_child(_tip)
 
 	# 默认选中第一个技能(愚者)
 	if not Perks.PERKS_NORMAL.is_empty():

@@ -340,10 +340,14 @@ func _build_ui() -> void:
 	ui = CanvasLayer.new()
 	add_child(ui)
 
-	# 塔罗牌技能信息悬浮提示(共享,挂在最上层 UI)
+	# 塔罗牌技能信息悬浮提示(共享,挂在最高层 CanvasLayer,始终在最上)
 	_tip = TarotTooltip.new()
 	_tip.setup(_font())
-	ui.add_child(_tip)
+	_tip.z_index = 100
+	var tip_layer := CanvasLayer.new()
+	tip_layer.layer = 60  # 高于游戏 UI(1)/四人角标层(5),低于 CRT(99)/过渡(100)
+	add_child(tip_layer)
+	tip_layer.add_child(_tip)
 
 	status_label = _make_label("", 24, Color(1, 0.95, 0.85))
 	status_label.position = Vector2(0, 10)
@@ -4544,10 +4548,9 @@ func _show_skill_announce(perk_id: String, side: int) -> void:
 	tw.parallel().tween_method(func(v: float): mat.set_shader_parameter("y_rot", v), y0, 0.0, fall).set_trans(Tween.TRANS_CUBIC).set_ease(ease)
 	tw.parallel().tween_method(func(v: float): mat.set_shader_parameter("x_rot", v), x0, 0.0, fall).set_trans(Tween.TRANS_CUBIC).set_ease(ease)
 	tw.parallel().tween_property(spr, "scale", base_scale * 1.08, fall).set_trans(Tween.TRANS_CUBIC).set_ease(ease)
-	# 落地:爆彩色粒子 + 缩小退场
+	# 落地:缩小退场(无粒子)
 	tw.tween_callback(func():
-		# shader 已归零(平面),爆彩色粒子
-		_burst_particles(Vector2(640, 360))
+		# shader 已归零(平面),直接缩小退场
 		var tw2 := create_tween()
 		tw2.tween_property(spr, "scale", base_scale * 0.15, 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 		tw2.parallel().tween_property(spr, "modulate:a", 0.0, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
@@ -4559,62 +4562,6 @@ func _show_skill_announce(perk_id: String, side: int) -> void:
 		)
 	)
 	_announce_tween = tw
-
-
-# 技能落地彩色粒子爆发(彩虹)
-func _burst_particles(pos: Vector2) -> void:
-	if not is_instance_valid(self):
-		return
-	# 同时喷发多种颜色的粒子(每色一群,同时出现不同颜色);大小不一、无重力、四周飘散、速度渐降、半透明、量大、发光
-	var glow := _make_glow_tex()
-	var colors := [
-		Color(1.0, 0.25, 0.25), Color(1.0, 0.62, 0.2), Color(1.0, 1.0, 0.3),
-		Color(0.3, 1.0, 0.45), Color(0.3, 0.65, 1.0), Color(0.7, 0.3, 1.0),
-	]
-	for ci in colors.size():
-		var p := CPUParticles2D.new()
-		p.position = pos
-		p.one_shot = true
-		p.emitting = true
-		p.amount = 26
-		p.lifetime = 1.0
-		p.explosiveness = 1.0
-		p.direction = Vector2(0, -1)
-		p.spread = 180.0          # 向四周飘散
-		p.gravity = Vector2.ZERO   # 无重力
-		p.damping_min = 120.0
-		p.damping_max = 280.0      # 速度逐渐下降(阻尼)
-		p.initial_velocity_min = 130.0
-		p.initial_velocity_max = 360.0
-		p.scale_amount_min = 1.0
-		p.scale_amount_max = 4.0  # 大小不一
-		p.texture = glow           # 发光粒子(径向光晕)
-		var c: Color = colors[ci]
-		p.color = Color(c.r, c.g, c.b, 0.6)  # 半透明
-		add_child(p)
-		get_tree().create_timer(1.6).timeout.connect(func():
-			if is_instance_valid(p):
-				p.queue_free()
-		)
-
-
-# 径向光晕粒子纹理(白色中心→透明边缘,让粒子发光)
-static var _glow_tex: Texture2D
-static func _make_glow_tex() -> Texture2D:
-	if _glow_tex != null:
-		return _glow_tex
-	var g := GradientTexture2D.new()
-	g.width = 16
-	g.height = 16
-	g.fill = GradientTexture2D.FILL_RADIAL
-	g.fill_from = Vector2(0.5, 0.5)
-	g.fill_to = Vector2(0.5, 0.0)
-	var gr := Gradient.new()
-	gr.set_color(0, Color(1, 1, 1, 1.0))
-	gr.set_color(1, Color(1, 1, 1, 0.0))
-	g.gradient = gr
-	_glow_tex = g
-	return g
 
 
 func _activate_skill(perk_id: String, side: int) -> void:

@@ -14,6 +14,9 @@ const FONT_SIZE := 12
 var _perk_id := ""
 var _font: Font
 var pinned := false  # true 时不跟随鼠标(调试/固定展示用)
+var _name_label: Label
+var _tip_label: Label
+var _desc_vbox: VBoxContainer
 
 
 func setup(font: Font) -> void:
@@ -47,33 +50,40 @@ func show_for(perk_id: String, name: String, tip: String, desc: String) -> void:
 	var tx := PAD + THUMB + 10.0
 	var tw := W - PAD - tx
 
-	var t := _label(name, 16, Color(1, 0.92, 0.72))
-	t.position = Vector2(tx, 8)
-	t.size = Vector2(tw, 24)
-	add_child(t)
-
-	var tp := _label(tip, 11, Color(0.68, 0.85, 1.0))
-	tp.position = Vector2(tx, 34)
-	tp.size = Vector2(tw, 18)
-	add_child(tp)
-
 	var d := _label(desc, 11, Color(0.9, 0.88, 0.82))
 	d.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 	d.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	d.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	# 描述放入固定宽容器,强制按宽度换行(直接设 size 会被文本最小宽度撑开不换行)
 	var dv := VBoxContainer.new()
-	dv.position = Vector2(tx, 56)
-	dv.custom_minimum_size = Vector2(tw, 0)
-	dv.size = Vector2(tw, 0)
 	dv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(dv)
 	dv.add_child(d)
-	var desc_h := _font.get_multiline_string_size(desc, HORIZONTAL_ALIGNMENT_LEFT, tw, 11).y
-	dv.size.y = maxf(desc_h, 20.0)
+	dv.size = Vector2(tw, 18)
+	dv.custom_minimum_size = Vector2(tw, 0)
+	_desc_vbox = dv
 
-	# 面板高度:牌面小图高度与文字区取大者
-	size = Vector2(W, maxf(Tarot.card_size(THUMB).y + PAD * 2, 56 + dv.size.y + PAD))
+	# 高度:用估算换行高度 + 行余量(Label 实际换行略多于估算),文本块垂直居中避免下方大片空白
+	var est_desc := _font.get_multiline_string_size(desc, HORIZONTAL_ALIGNMENT_LEFT, tw, 11).y + 20.0
+	var block_h := 24.0 + 2.0 + 18.0 + 2.0 + est_desc
+	var content_h := maxf(Tarot.card_size(THUMB).y + PAD * 2, block_h + PAD * 2)
+	size = Vector2(W, content_h)
+	var top := maxf(PAD, (content_h - block_h) / 2.0 + PAD)
+
+	var t := _label(name, 16, Color(1, 0.92, 0.72))
+	t.position = Vector2(tx, top)
+	t.size = Vector2(tw, 24)
+	_name_label = t
+	add_child(t)
+
+	var tp := _label(tip, 11, Color(0.68, 0.85, 1.0))
+	tp.position = Vector2(tx, top + 26.0)
+	tp.size = Vector2(tw, 18)
+	_tip_label = tp
+	add_child(tp)
+
+	dv.position = Vector2(tx, top + 46.0)
+	add_child(dv)
+
 	visible = true
 	queue_redraw()
 
