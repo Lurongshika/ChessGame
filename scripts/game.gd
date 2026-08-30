@@ -12,6 +12,7 @@ const ChatPanel := preload("res://scripts/chat_panel.gd")
 const TarotTooltip := preload("res://scripts/tarot_tooltip.gd")
 const Tarot := preload("res://scripts/tarot.gd")
 const CARD3D_SH := preload("res://shaders/card_3d.gdshader")
+const CARD_FLY_SH := preload("res://shaders/card_fly.gdshader")
 
 const CELL := 56
 # 棋盘在 1280×720 窗口中直接居中:中心 x=(1280-504)/2=388,中心 y=(720-560)/2=80
@@ -4507,46 +4508,41 @@ func _show_skill_announce(perk_id: String, side: int) -> void:
 	ui.add_child(root)
 	_announce_root = root
 
-	# 飞卡(塔罗牌面 + fake_3D shader)
-	var w := 130.0
+	# 飞卡(Sprite2D 默认中心为原点,位置即卡牌中心;缩小到 1/4;card_fly 纯透视倾斜)
+	var w := 32.5
 	var h := Tarot.card_size(w).y
-	var fly := Control.new()
-	fly.size = Vector2(w, h)
-	fly.position = Vector2(640 - w / 2.0, -h - 40.0)  # 从屏幕上方外进入
-	var tex := TextureRect.new()
-	tex.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tex.texture = Tarot.texture(perk_id)
+	var base_scale := Vector2(w / 408.0, h / 632.0)
+	var spr := Sprite2D.new()
+	spr.centered = true
+	spr.texture = Tarot.texture(perk_id)
+	spr.scale = base_scale
+	spr.position = Vector2(640, -h)  # 中心从屏幕上方外进入
 	var mat := ShaderMaterial.new()
-	mat.shader = CARD3D_SH
-	mat.set_shader_parameter("rect_size", Vector2(w, h))
-	mat.set_shader_parameter("fov", 90.0)
+	mat.shader = CARD_FLY_SH
 	var y0 := 65.0   # 起始 3D 偏转(绕 Y)
 	var x0 := -32.0  # 起始 3D 偏转(绕 X)
 	mat.set_shader_parameter("y_rot", y0)
 	mat.set_shader_parameter("x_rot", x0)
-	tex.material = mat
-	fly.add_child(tex)
-	fly.pivot_offset = Vector2(w, h) / 2.0
-	root.add_child(fly)
+	spr.material = mat
+	root.add_child(spr)
 
-	var center := Vector2(640 - w / 2.0, 360 - h / 2.0)  # 屏幕中央
+	var center := Vector2(640, 360)  # 屏幕中央(卡牌中心对准)
 	var fall := 0.85
 	var ease := Tween.EASE_OUT
 	var tw := create_tween()
-	# 从天而降:先快后慢
-	tw.tween_property(fly, "position", center, fall).set_trans(Tween.TRANS_CUBIC).set_ease(ease)
+	# 从天而降:先快后慢(中心落至屏幕中心)
+	tw.tween_property(spr, "position", center, fall).set_trans(Tween.TRANS_CUBIC).set_ease(ease)
 	# 下落过程中 3D 旋转,落地时偏转恰好回归 0(无偏转)
 	tw.parallel().tween_method(func(v: float): mat.set_shader_parameter("y_rot", v), y0, 0.0, fall).set_trans(Tween.TRANS_CUBIC).set_ease(ease)
 	tw.parallel().tween_method(func(v: float): mat.set_shader_parameter("x_rot", v), x0, 0.0, fall).set_trans(Tween.TRANS_CUBIC).set_ease(ease)
-	tw.parallel().tween_property(fly, "scale", Vector2(1.08, 1.08), fall).set_trans(Tween.TRANS_CUBIC).set_ease(ease)
+	tw.parallel().tween_property(spr, "scale", base_scale * 1.08, fall).set_trans(Tween.TRANS_CUBIC).set_ease(ease)
 	# 落地:爆彩色粒子 + 缩小退场
 	tw.tween_callback(func():
 		# shader 已归零(平面),爆彩色粒子
 		_burst_particles(Vector2(640, 360))
 		var tw2 := create_tween()
-		tw2.tween_property(fly, "scale", Vector2(0.15, 0.15), 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
-		tw2.parallel().tween_property(fly, "modulate:a", 0.0, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw2.tween_property(spr, "scale", base_scale * 0.15, 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+		tw2.parallel().tween_property(spr, "modulate:a", 0.0, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		tw2.tween_callback(func():
 			if root != null and is_instance_valid(root):
 				root.queue_free()
