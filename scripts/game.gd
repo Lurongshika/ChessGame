@@ -187,8 +187,8 @@ var move_log_box: VBoxContainer
 var _record4_history: Array = []  # 四人:对局记录 [{text, turn}]
 var self_panel: FloatingPanel
 var enemy_panel: FloatingPanel
-var self_perk_list_box: VBoxContainer
-var enemy_perk_list_box: VBoxContainer
+var self_perk_list_box: HBoxContainer
+var enemy_perk_list_box: HBoxContainer
 var _four_perk_boxes: Array = []  # 四人模式:四方技能悬浮窗内容框
 var draft_root: Control
 var _draft_ui_shown := false  # 三选一界面是否已首次显示(首次弹入,刷新重建不重复)
@@ -369,10 +369,10 @@ func _build_ui() -> void:
 	_build_record_panel()
 
 	# 浮动技能面板:可拖动/折叠/缩放,交互与系统窗口一致(先设位置尺寸再 setup)
-	# 我方技能悬浮框(上)——下移给右上角敌方徽章让位
+	# 我方技能悬浮框(上)——加宽,卡牌横向排列
 	self_panel = FloatingPanel.new()
-	self_panel.position = Vector2(1030, 96)
-	self_panel.size = Vector2(230, 290)
+	self_panel.position = Vector2(836, 96)
+	self_panel.size = Vector2(432, 244)
 	self_panel.setup("我方技能", _font())
 	ui.add_child(self_panel)
 
@@ -380,8 +380,8 @@ func _build_ui() -> void:
 
 	# 敌方技能悬浮框(下)
 	enemy_panel = FloatingPanel.new()
-	enemy_panel.position = Vector2(1030, 402)
-	enemy_panel.size = Vector2(230, 290)
+	enemy_panel.position = Vector2(836, 400)
+	enemy_panel.size = Vector2(432, 244)
 	enemy_panel.setup("敌方技能", _font())
 	ui.add_child(enemy_panel)
 
@@ -587,10 +587,10 @@ func _build_ui4() -> void:
 		idlab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		corner_layer.add_child(idlab)
 		_four_frames.append({"frame": frame, "side": side})
-	# 技能卡列:放在各玩家头像下方(上方角落)/上方(下方角落),鼠标悬浮放大+3D 偏转
+	# 技能卡行:横向排列,放在各玩家头像下方(上方角落)/上方(下方角落),鼠标悬浮放大+3D 偏转
 	for i in [1, 0, 2, 3]:
-		var box := VBoxContainer.new()
-		box.add_theme_constant_override("separation", 6)
+		var box := HBoxContainer.new()
+		box.add_theme_constant_override("separation", 8)
 		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		corner_layer.add_child(box)
 		_four_perk_boxes.append(box)
@@ -612,7 +612,7 @@ func _refresh_perk_panels4() -> void:
 	for i in _four_perk_boxes.size():
 		if _four_perk_boxes[i] == null:
 			continue
-		var box: VBoxContainer = _four_perk_boxes[i]
+		var box: Container = _four_perk_boxes[i]
 		for child in box.get_children():
 			box.remove_child(child)
 			child.queue_free()
@@ -656,15 +656,15 @@ func _refresh_perk_panels4() -> void:
 
 
 # 按角落定位四人技能卡列(上方角落卡列在头像下方,下方角落卡列在头像上方)
-func _position_four_box(box: VBoxContainer, side: int) -> void:
+func _position_four_box(box: HBoxContainer, side: int) -> void:
 	if not FOUR_CORNERS.has(side):
 		return
 	var corner: Vector2 = FOUR_CORNERS[side]
 	var h := box.get_combined_minimum_size().y
-	if FOUR_CARD_ABOVE[side]:
-		box.position = Vector2(corner.x, corner.y - 6.0 - h)
-	else:
-		box.position = Vector2(corner.x, corner.y + 58.0)
+	var w := box.get_combined_minimum_size().x
+	var y: float = corner.y + 58.0 if not FOUR_CARD_ABOVE[side] else corner.y - 6.0 - h
+	var x: float = 24.0 if side in [1, 0] else 1280.0 - 24.0 - w  # 左侧行向右延伸,右侧行向左延伸(右边缘对齐)
+	box.position = Vector2(x, y)
 
 
 func _on_perk_clicked4(perk_id: String, side: int) -> void:
@@ -1157,15 +1157,17 @@ func _net_avatar4(data: Dictionary, size: int) -> Texture2D:
 	return null
 
 
-func _make_scroll_list(panel: FloatingPanel) -> VBoxContainer:
-	# 在悬浮框内容区创建可滚动的技能卡列表
+func _make_scroll_list(panel: FloatingPanel) -> HBoxContainer:
+	# 在悬浮框内容区创建可横向滚动的技能卡列表(卡牌横向排列)
 	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size = Vector2(210, 250)
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.custom_minimum_size = Vector2(412, 190)
 	panel.content.add_child(scroll)
-	var box := VBoxContainer.new()
+	var box := HBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_theme_constant_override("separation", 6)
+	box.add_theme_constant_override("separation", 8)
 	scroll.add_child(box)
 	return box
 
@@ -4313,7 +4315,7 @@ func _self_side() -> int:
 	return own_side
 
 
-func _add_perk_cards(box: VBoxContainer, side_id: int, is_self: bool) -> void:
+func _add_perk_cards(box: Container, side_id: int, is_self: bool) -> void:
 	if perks_of(side_id).is_empty():
 		# 标准模式或无技能:显示提示
 		var l := _make_label("无技能(标准模式)", 13, Color(0.6, 0.58, 0.54))
@@ -4344,7 +4346,7 @@ func _add_perk_cards(box: VBoxContainer, side_id: int, is_self: bool) -> void:
 		if not prog.is_empty():
 			tip += "  [%s]" % prog
 		var card := PerkCard.new()
-		card.setup(id, side_id, info["name"], tip, info["desc"], _font(), is_self, 210.0, _tip)
+		card.setup(id, side_id, info["name"], tip, info["desc"], _font(), is_self, 120.0, _tip)
 		card.clicked.connect(_on_perk_clicked)
 		box.add_child(card)
 

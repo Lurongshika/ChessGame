@@ -396,6 +396,8 @@ func _parse_cmdline_args() -> void:
 			perk_pool = arg.trim_prefix("--pool=")
 		elif arg.begins_with("--slot="):
 			load_slot = int(arg.trim_prefix("--slot="))
+		elif arg.begins_with("--demo="):
+			demo_perk = arg.trim_prefix("--demo=")  # 图鉴演示对局:命令行直接指定技能 id(调试用)
 	# 客户端未指定 IP 时默认本机回环(本机双开联机测试)
 	if net_role == "client" and server_ip.is_empty():
 		server_ip = "127.0.0.1"
