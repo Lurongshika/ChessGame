@@ -581,7 +581,7 @@ func _build_ui4() -> void:
 	for side in [1, 0, 2, 3]:
 		var pos: Vector2 = FOUR_CORNERS[side]
 		var info: Dictionary = Global.lobby_players.get(side, {})
-		var nm_text: String = info.get("name", SIDE_NAMES4[side])
+		var nm_text: String = info.get("name", _color_name(side))
 		var frame := _make_badge_frame(pos)
 		corner_layer.add_child(frame)
 		# 头像(若有网络头像)
@@ -713,7 +713,7 @@ func _on_perk_clicked4(perk_id: String, side: int) -> void:
 	# 只能用己方(本进程控制的一方)技能,不能用"当前回合方"——否则主机能在加入方回合替其用技能
 	var my := my_side4 if my_side4 >= 0 else current_side4()
 	if side != my:
-		_show_status4("只能使用己方(%s)技能" % SIDE_NAMES4[side])
+		_show_status4("只能使用己方(%s)技能" % _side_display_name(side))
 		return
 	if not _is_active_skill(perk_id):
 		_show_status4("[%s] 被动技能,整局自动生效" % perks_data[perk_id]["name"])
@@ -1990,13 +1990,26 @@ func _side_from_name(s: String) -> int:
 
 func _side_name(side: int) -> String:
 	if four_mode:
-		# 优先玩家名,否则棋子颜色
-		var info: Dictionary = Global.lobby_players.get(side, {})
-		var nm: String = str(info.get("name", ""))
-		if nm != "" and not bool(info.get("is_ai", false)):
-			return nm
-		return SIDE_NAMES4.get(side, "方")
+		return _side_display_name(side)
 	return "红方" if side == R.Side.RED else "黑方"
+
+
+# 自选颜色名(按实际棋子颜色映射,非固定 红/黑/绿/蓝)
+func _color_name(side: int) -> String:
+	if Global.player_colors.has(side) and int(Global.player_colors[side]) >= 0:
+		var idx: int = int(Global.player_colors[side])
+		if idx < COLOR_NAME16.size():
+			return COLOR_NAME16[idx]
+	return SIDE_NAMES4.get(side, "方")
+
+
+# 四人显示名:优先玩家名,否则按实际棋子颜色
+func _side_display_name(side: int) -> String:
+	var info: Dictionary = Global.lobby_players.get(side, {})
+	var nm: String = str(info.get("name", ""))
+	if nm != "" and not bool(info.get("is_ai", false)):
+		return nm
+	return _color_name(side)
 
 
 # 棋子类型名 → Type(支持中文名与单字母)
@@ -2222,7 +2235,7 @@ func _on_peer_disconnected(id: int) -> void:
 		for side in four_side_to_peer:
 			if four_side_to_peer[side] == id:
 				_four_side_absent[side] = true
-				_show_status4("%s 掉线,等待重连..." % SIDE_NAMES4[side])
+				_show_status4("%s 掉线,等待重连..." % _side_display_name(side))
 				return
 	status_label.text = "对方已断开连接"
 	if phase != Phase.OVER:
@@ -3310,7 +3323,7 @@ func _update_draft_ui() -> void:
 	if four_mode:
 		var texts4: Array[String] = []
 		for side in [1, 0, 2, 3]:
-			texts4.append("%s已选: %s" % [SIDE_NAMES4[side], _selected_names4(side)])
+			texts4.append("%s已选: %s" % [_side_display_name(side), _selected_names4(side)])
 		info_label = _make_label("\n".join(texts4), 14, Color(0.85, 0.82, 0.75))
 	else:
 		info_label = _make_label("红方已选: " + _selected_names(R.Side.RED) + "\n黑方已选: " + _selected_names(R.Side.BLACK), 15, Color(0.85, 0.82, 0.75))
@@ -3342,7 +3355,7 @@ func _selected_names4(side: int) -> String:
 
 func _draft_side_name(side: int) -> String:
 	if four_mode:
-		return SIDE_NAMES4[side]
+		return _side_display_name(side)
 	return "红方" if side == R.Side.RED else "黑方"
 
 
@@ -3464,7 +3477,7 @@ func _refresh_check4() -> void:
 		var now: bool = _is_in_check4(board, s)
 		in_check4[s] = now
 		if now and not _prev_check4[s]:
-			_show_status4("⚠ %s 被将!" % SIDE_NAMES4[s])
+			_show_status4("⚠ %s 被将!" % _side_display_name(s))
 			Global.play_sfx("kill", -4.0)
 		_prev_check4[s] = now
 
@@ -4463,7 +4476,7 @@ func _update_piece_tooltip() -> void:
 
 
 func _piece_display_name(p: Dictionary) -> String:
-	var side_name: String = ("红方" if p["side"] == R.Side.RED else "黑方") if not four_mode else SIDE_NAMES4[p["side"]]
+	var side_name: String = ("红方" if p["side"] == R.Side.RED else "黑方") if not four_mode else _color_name(p["side"])
 	var pn: String = R.PIECE_NAMES[p["type"]] if p["side"] == R.Side.RED else R.PIECE_NAMES_BLACK[p["type"]]
 	return "%s %s" % [side_name, pn]
 
@@ -5939,6 +5952,8 @@ const GRID4 := 17
 const CENTER4 := 4
 const SIDE_ORDER4 := [1, 3, 0, 2]  # 黑→蓝→红→绿
 const SIDE_NAMES4 := {0: "红方", 1: "黑方", 2: "绿方", 3: "蓝方"}
+# 自选棋子颜色(Global.COLORS16 索引)→ 中文色名(与 _side_color 渲染一致)
+const COLOR_NAME16 := ["红方", "蓝方", "绿方", "紫方", "粉方", "青方", "黑方", "橙方"]
 
 var _piece_tex4: ImageTexture
 var _view_rot4 := 0   # 四人联机:本机视角旋转(0=红下,1=黑上180°,2=绿左90°CW,3=蓝右270°CW)
@@ -6507,7 +6522,7 @@ func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 		var row: Array = board[to.y]
 		var piece: Dictionary = row[to.x]
 		piece["type"] = R.Type.QUEEN
-		_show_status4("%s 兵晋升为后!" % SIDE_NAMES4[side])
+		_show_status4("%s 兵晋升为后!" % _side_display_name(side))
 	# 四人:记录走子
 	var piece_name: String = R.PIECE_NAMES[mover["type"]] if (side == 0 or side == 2) else R.PIECE_NAMES_BLACK[mover["type"]]
 	_record4_history.append({"text": "%s %s %d%d→%d%d" % [_side_short4(side), piece_name, from.x, from.y, to.x, to.y], "turn": turn4, "side": side})
@@ -6567,7 +6582,7 @@ func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 		var occ := _occupy_winner4()
 		if occ >= 0:
 			winner4 = occ
-			_show_status4("游戏结束:%s 占领中心获胜!" % SIDE_NAMES4[occ])
+			_show_status4("游戏结束:%s 占领中心获胜!" % _side_display_name(occ))
 			_show_four_result()
 			queue_redraw()
 
@@ -6615,11 +6630,11 @@ func _handle_king_captured4(dead: int, killer: int) -> String:
 		# 杀棋计数:杀棋次数 +1,被杀方半场恢复开局状态(半场内敌方棋子全摧毁)
 		kill_count4[dead] += 1
 		_update_progress4()
-		_show_status4("%s 被杀棋(%d/%d)!" % [SIDE_NAMES4[dead], kill_count4[dead], kill_count])
+		_show_status4("%s 被杀棋(%d/%d)!" % [_side_display_name(dead), kill_count4[dead], kill_count])
 		_restore_arm4(dead)
 		if kill_count4[dead] >= kill_count:
 			winner4 = killer
-			_show_status4("游戏结束:%s 达成 %d 次杀棋,获胜!" % [SIDE_NAMES4[killer], kill_count])
+			_show_status4("游戏结束:%s 达成 %d 次杀棋,获胜!" % [_side_display_name(killer), kill_count])
 			_show_four_result()
 			queue_redraw()
 			return "winner"
@@ -6635,13 +6650,13 @@ func _handle_king_captured4(dead: int, killer: int) -> String:
 	# 将帅被杀后处理(先处理棋子再移除王)
 	var king_down: String = rules.get("king_down", "grey")
 	if king_down == "inherit":
-		_show_status4("%s 的王被吃,棋子继承给 %s!" % [SIDE_NAMES4[dead], SIDE_NAMES4[killer]])
+		_show_status4("%s 的王被吃,棋子继承给 %s!" % [_side_display_name(dead), _side_display_name(killer)])
 		_inherit_pieces4(dead, killer)
 	elif king_down == "grey":
-		_show_status4("%s 的王被吃,棋子变灰保留!" % SIDE_NAMES4[dead])
+		_show_status4("%s 的王被吃,棋子变灰保留!" % _side_display_name(dead))
 		_grey_keep_pieces4(dead)
 	else:
-		_show_status4("%s 的王被吃,出局!" % SIDE_NAMES4[dead])
+		_show_status4("%s 的王被吃,出局!" % _side_display_name(dead))
 		_remove_pieces4(dead)
 	# 检查胜利
 	if win_mode == "occupy":
@@ -6649,7 +6664,7 @@ func _handle_king_captured4(dead: int, killer: int) -> String:
 		var occ_winner := _occupy_winner4()
 		if occ_winner >= 0:
 			winner4 = occ_winner
-			_show_status4("游戏结束:%s 占领中心获胜!" % SIDE_NAMES4[occ_winner])
+			_show_status4("游戏结束:%s 占领中心获胜!" % _side_display_name(occ_winner))
 			_show_four_result()
 			queue_redraw()
 			return "winner"
@@ -6660,7 +6675,7 @@ func _handle_king_captured4(dead: int, killer: int) -> String:
 	if alive_list.size() <= 1:
 		winner4 = alive_list[0] if alive_list.size() == 1 else -1
 		if winner4 >= 0:
-			_show_status4("游戏结束:%s 获胜!" % SIDE_NAMES4[winner4])
+			_show_status4("游戏结束:%s 获胜!" % _side_display_name(winner4))
 		else:
 			_show_status4("平局")
 		_show_four_result()
@@ -6829,7 +6844,7 @@ func _update_status4() -> void:
 			else:
 				var nm2: String = ""
 				if Global.lobby_players.has(side):
-					nm2 = Global.lobby_players[side].get("name", SIDE_NAMES4[side])
+					nm2 = Global.lobby_players[side].get("name", _color_name(side))
 				status_label.text = "等待 %s..." % nm2 + check_txt
 				_my_turn_breath4 = false
 		else:
@@ -6838,7 +6853,7 @@ func _update_status4() -> void:
 			if Global.lobby_players.has(side):
 				nm = Global.lobby_players[side].get("name", "")
 			if nm.is_empty():
-				nm = SIDE_NAMES4[side]
+				nm = _side_display_name(side)
 			status_label.text = "回合：" + nm + check_txt
 			_my_turn_breath4 = false
 		status_label.modulate = _side_color(side)
@@ -6944,7 +6959,7 @@ func _begin_turn4() -> void:
 			hidden_pieces4.clear()
 	if skip_next_turn4[side]:
 		skip_next_turn4[side] = false
-		_show_status4("%s 被节制跳过本回合" %  SIDE_NAMES4[side])
+		_show_status4("%s 被节制跳过本回合" %  _side_display_name(side))
 		_end_turn4()
 		return
 	_refresh_judgement4(side)
@@ -7092,7 +7107,7 @@ func _refresh_judgement4(side: int) -> void:
 	if actives.is_empty():
 		return
 	disabled_skills4[target] = actives.pick_random()
-	_show_status4("审判:%s 的[%s]被禁用" %  [SIDE_NAMES4[target], perks_data[disabled_skills4[target]]["name"]])
+	_show_status4("审判:%s 的[%s]被禁用" %  [_side_display_name(target), perks_data[disabled_skills4[target]]["name"]])
 
 
 func _refresh_pope_guard4(side: int) -> void:
