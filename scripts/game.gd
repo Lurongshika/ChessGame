@@ -826,7 +826,7 @@ func _side_short4(side: int) -> String:
 
 func _record_skill4(side: int, perk_id: String) -> void:
 	var nm: String = perks_data[perk_id]["name"] if perks_data.has(perk_id) else perk_id
-	_record4_history.append({"text": "%s 使用[%s]" % [_side_short4(side), nm], "turn": turn4, "side": side})
+	_record4_history.append({"text": "使用[%s]" % [nm], "turn": turn4, "side": side})
 	_refresh_record4()
 
 
@@ -4186,12 +4186,11 @@ func _refresh_move_log() -> void:
 		if t < 0:
 			t = i / 2 + 1  # 旧存档兜底
 		var g: int = t  # 同一回合的红方与黑方步数合并到一行
-		var side_name := "红" if side == R.Side.RED else "黑"
 		var text: String
 		if m.get("kind", "move") == "skill":
-			text = "%s方 技能[%s]" % [side_name, name]
+			text = "技能[%s]" % [name]
 		else:
-			text = "%s%s %d%d→%d%d" % [side_name, name, m["from"].x, m["from"].y, m["to"].x, m["to"].y]
+			text = "(%d,%d)→(%d,%d)" % [m["from"].x, m["from"].y, m["to"].x, m["to"].y]
 			if m.get("kind", "move") == "free_retreat":
 				text += "退"
 		if not groups.has(g):
@@ -4529,6 +4528,7 @@ func _piece_display_name(p: Dictionary) -> String:
 func _piece_status_lines(pos: Vector2i, p: Dictionary) -> Array:
 	var side: int = p["side"]
 	var lines: Array = []
+	lines.append("坐标:(%d,%d)" % [pos.x, pos.y])
 	if poison_map.has(pos):
 		lines.append("死亡状态:剩余 %d 回合(移动解毒,到期摧毁)" % int(poison_map[pos]))
 	if invincible_piece == pos and invincible_piece_turns > 0:
@@ -4558,6 +4558,7 @@ func _piece_status_lines(pos: Vector2i, p: Dictionary) -> Array:
 func _piece_status_lines4(pos: Vector2i, p: Dictionary) -> Array:
 	var side: int = p["side"]
 	var lines: Array = []
+	lines.append("坐标:(%d,%d)" % [pos.x, pos.y])
 	if poison_map4.has(pos):
 		lines.append("死亡状态:剩余 %d 回合(移动解毒,到期摧毁)" % int(poison_map4[pos]))
 	if invincible_piece4 == pos and invincible_piece_turns4 > 0:
@@ -6580,7 +6581,7 @@ func _move4(from: Vector2i, to: Vector2i, kind: String = "move") -> void:
 		_show_status4("%s 兵晋升为后!" % _side_display_name(side))
 	# 四人:记录走子
 	var piece_name: String = R.PIECE_NAMES[mover["type"]] if (side == 0 or side == 2) else R.PIECE_NAMES_BLACK[mover["type"]]
-	_record4_history.append({"text": "%s %s %d%d→%d%d" % [_side_short4(side), piece_name, from.x, from.y, to.x, to.y], "turn": turn4, "side": side})
+	_record4_history.append({"text": "(%d,%d)→(%d,%d)" % [from.x, from.y, to.x, to.y], "turn": turn4, "side": side})
 	_refresh_record4()
 	if captured != null:
 		# 吃子特效:屏幕震动 + 被吃子粒子破碎
