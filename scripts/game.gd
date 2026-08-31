@@ -3066,7 +3066,8 @@ func _select_draft_option(perk_id: String) -> void:
 		return
 	perks_of(draft_side)[perk_id] = true
 	draft_round += 1
-	if draft_round >= 3:
+	var dneed := clampi(int(Global.game_rules.get("skill_count", 3)), 1, 4)
+	if draft_round >= dneed:
 		if draft_side == R.Side.RED:
 			if net_role == "host":
 				# 联机:红方(主机)选完 → 发给黑方(客户端)
@@ -3089,8 +3090,9 @@ func _select_draft_option(perk_id: String) -> void:
 
 
 func _auto_pick_black() -> void:
-	# 人机:电脑(黑方)自动随机选 3 个
-	for i in 3:
+	# 人机:电脑(黑方)自动随机选 need 个
+	var abneed := clampi(int(Global.game_rules.get("skill_count", 3)), 1, 4)
+	for i in abneed:
 		var taken := {}
 		taken.merge(perks_red)
 		taken.merge(perks_black)
@@ -3137,6 +3139,31 @@ func _draft_next4() -> void:
 
 
 # 四人:确认选择(本地四方 / 联机提交)
+# 选牌重置:已选保留,未选重新抽取(需大厅自定义选项开启)
+func _reroll_draft4() -> void:
+	if phase != Phase.SKILL_DRAFT or draft4_options.is_empty():
+		return
+	var need := clampi(int(Global.game_rules.get("skill_count", 3)), 1, 4)
+	var keep: Array = _draft_selected4.duplicate()
+	# 排除已确认与已选的,重抽未选槽位(保持总选项尽量为 8)
+	var taken := {}
+	for side in 4:
+		taken.merge(perks4[side])
+	for id in keep:
+		taken[id] = true
+	var unselected := maxi(8 - keep.size(), 0)
+	var fresh := Perks.draw_options(unselected, taken, Global.perk_pool)
+	var new_opts: Array = keep.duplicate()
+	for id in fresh:
+		if not id in new_opts:
+			new_opts.append(id)
+	if new_opts.size() < need:
+		_show_status4("技能池不足,无法重抽")
+		return
+	draft4_options = new_opts
+	_update_draft_ui()
+
+
 func _confirm_draft4() -> void:
 	if phase != Phase.SKILL_DRAFT:
 		return
@@ -3301,8 +3328,9 @@ func _update_draft_ui() -> void:
 	if four_mode and cur_opts.size() >= 8:
 		# 四人:8 卡 4×2 排列,点击选中/取消,确认按钮提交
 		var picked: Array = _draft_selected4
-		# 抬头:技能选择 x/3(每选一个 +1)
-		var title4 := _make_label("技能选择 %d/3" % picked.size(), 36, Color(0.95, 0.85, 0.6))
+		var need := clampi(int(Global.game_rules.get("skill_count", 3)), 1, 4)
+		# 抬头:技能选择 x/need(每选一个 +1)
+		var title4 := _make_label("技能选择 %d/%d" % [picked.size(), need], 36, Color(0.95, 0.85, 0.6))
 		title4.position = Vector2(0, 46)
 		title4.size = Vector2(1280, 44)
 		title4.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -3320,26 +3348,31 @@ func _update_draft_ui() -> void:
 			card.size = Tarot.card_size(110.0)
 			card.set_selected(is_sel)
 			# 原地切换选中/取消,不重建全部卡(避免其他牌"归位"造成卡顿)
-			card.clicked.connect(func(pid: String, _s: int, selfcard: Control = card):
+			card.clicked.connect(func(pid: String, _s: int, selfcard: Control = card, nd: int = need):
 				var now_sel: bool
 				if pid in _draft_selected4:
 					_draft_selected4.erase(pid)
 					now_sel = false
 				else:
-					if _draft_selected4.size() >= 3:
-						_show_status4("最多选择 3 个技能")
+					if _draft_selected4.size() >= nd:
+						_show_status4("最多选择 %d 个技能" % nd)
 						return
 					_draft_selected4.append(pid)
 					now_sel = true
 				selfcard.set_selected(now_sel)
 				if _draft_counter_label != null and is_instance_valid(_draft_counter_label):
-					_draft_counter_label.text = "技能选择 %d/3" % _draft_selected4.size()
+					_draft_counter_label.text = "技能选择 %d/%d" % [_draft_selected4.size(), nd]
 			)
 			draft_root.add_child(card)
 		# 确认按钮
-		var confirm := _make_button("确认选择", Vector2(1280 / 2 - 120, 150 + 2 * 187 + 20), Vector2(240, 40))
+		var confirm := _make_button("确认选择", Vector2(1280 / 2 - 130, 150 + 2 * 187 + 20), Vector2(230, 40))
 		confirm.pressed.connect(_confirm_draft4)
 		draft_root.add_child(confirm)
+		# 选牌重置(开关开启时):已选保留,未选重抽
+		if bool(Global.game_rules.get("reroll", false)):
+			var reroll_btn := _make_button("重置(未选重抽)", Vector2(1280 / 2 + 110, 150 + 2 * 187 + 20), Vector2(230, 40))
+			reroll_btn.pressed.connect(_reroll_draft4)
+			draft_root.add_child(reroll_btn)
 		var hint := _make_label("点击技能卡选中/取消,选满 3 个后点确认", 16, Color(0.85, 0.82, 0.75))
 		hint.position = Vector2(0, 108)
 		hint.size = Vector2(1280, 24)
@@ -3350,7 +3383,8 @@ func _update_draft_ui() -> void:
 		return
 
 	# 双人:旧标题
-	var title := _make_label("技能选择 — %s 第 %d/3 轮" % [side_name, cur_round + 1], 36, Color(0.95, 0.85, 0.6))
+	var tneed := clampi(int(Global.game_rules.get("skill_count", 3)), 1, 4)
+	var title := _make_label("技能选择 — %s 第 %d/%d 轮" % [side_name, cur_round + 1, tneed], 36, Color(0.95, 0.85, 0.6))
 	title.position = Vector2(0, 60)
 	title.size = Vector2(1280, 46)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

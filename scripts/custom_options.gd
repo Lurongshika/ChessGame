@@ -9,6 +9,8 @@ const RULES_PATH := "user://rules.json"
 const DEFAULT_RULES := {
 	"win_mode": "classic",     # classic经典 / occupy占领 / kills杀棋计数
 	"kill_count": 2,           # 杀棋计数:达成次数胜
+	"skill_count": 3,          # 技能数量:每位玩家抽取技能数(1-4,默认3)
+	"reroll": false,           # 选牌重置:8选3时显示"重置"按钮,未选的重抽
 	"king_down": "grey",       # 将帅被杀后: grey变灰保留 / destroy全摧毁 / inherit继承
 	"promotion": "queen",      # 升变: queen兵到中心变后 / none无升变
 }
@@ -96,6 +98,26 @@ func setup(font: Font, on_change: Callable) -> void:
 		"queen": "任意兵走到正中心升变为后",
 		"none": "无升变",
 	}, rules.get("promotion", "queen"), func(k: String): rules["promotion"] = k; _save())
+
+	# 技能数量(1-4)
+	_add_title(content, "技能数量(每位玩家抽取数, 1-4)", 0)
+	var sc := SpinBox.new()
+	sc.min_value = 1
+	sc.max_value = 4
+	sc.value = int(rules.get("skill_count", 3))
+	sc.custom_minimum_size = Vector2(120, 36)
+	sc.add_theme_font_override("font", font)
+	sc.value_changed.connect(func(_v: float): rules["skill_count"] = int(sc.value); _save())
+	content.add_child(sc)
+
+	# 选牌重置开关(默认关)
+	var reroll_chk := CheckButton.new()
+	reroll_chk.text = "选牌重置:8选3时显示'重置'按钮,已选保留、未选重抽"
+	reroll_chk.button_pressed = bool(rules.get("reroll", false))
+	reroll_chk.add_theme_font_override("font", font)
+	reroll_chk.add_theme_font_size_override("font_size", 14)
+	reroll_chk.toggled.connect(func(on: bool): rules["reroll"] = on; _save())
+	content.add_child(reroll_chk)
 
 	_save()
 
