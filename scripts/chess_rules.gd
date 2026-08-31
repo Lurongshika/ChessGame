@@ -477,6 +477,16 @@ static func is_in_check(board: Array, side: int, perks_red: Dictionary, perks_bl
 	if king.x < 0:
 		return false
 	var enemy := 1 - side
+	# 帅将不能面对面:双方将帅同列且之间无任何棋子 → 视为被将
+	var eking := find_king(board, enemy)
+	if eking.x >= 0 and king.x == eking.x:
+		var clear := true
+		for rr in range(mini(king.y, eking.y) + 1, maxi(king.y, eking.y)):
+			if not piece_at(board, Vector2i(king.x, rr)).is_empty():
+				clear = false
+				break
+		if clear:
+			return true
 	for r in ROWS:
 		for c in COLS:
 			var pos := Vector2i(c, r)
