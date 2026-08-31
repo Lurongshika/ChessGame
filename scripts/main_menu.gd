@@ -204,6 +204,21 @@ func _show_settings() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	opt_root.add_child(title)
 
+	# CRT 效果开关(完全关闭:隐藏 overlay,不运行 shader,避免部分显卡闪黑线)
+	var crt_chk := CheckButton.new()
+	crt_chk.text = "CRT 效果"
+	crt_chk.button_pressed = Global.crt_enabled
+	crt_chk.position = Vector2(350, 244)
+	crt_chk.size = Vector2(180, 34)
+	crt_chk.add_theme_font_override("font", _font())
+	crt_chk.add_theme_font_size_override("font_size", 17)
+	crt_chk.toggled.connect(func(on: bool):
+		Global.crt_enabled = on
+		Global.set_crt_enabled(on)
+		Global._save_settings()
+	)
+	opt_root.add_child(crt_chk)
+
 	# CRT 效果强度(0-100 → 0.0-1.0)
 	var st_label := _label("CRT 效果强度", 17, Color(0.85, 0.82, 0.75))
 	st_label.position = Vector2(350, 280)

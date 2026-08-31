@@ -23,6 +23,7 @@ var reconnect_info := {}    # {ip, port, mode, standard}
 
 # 设置(用户可调,持久化到 user://settings.json)
 const SETTINGS_PATH := "user://settings.json"
+var crt_enabled := true    # CRT 效果开关(关=完全移除,不运行 shader,避免部分显卡闪黑线)
 var crt_strength := 0.4     # CRT 效果强度(0.0-1.0,默认 40%)
 var crt_aberration := 0.0005  # CRT 红蓝偏移(色差,0.0-0.01,默认 0.0005)
 var crt_curve := 10.5       # CRT 画面曲率(1.0-20.0,越小越弯,默认 50%≈10.5)
@@ -206,8 +207,9 @@ func _setup_crt() -> void:
 	mat.shader = load("res://shaders/crt.gdshader")
 	_crt_rect.material = mat
 	_crt_layer.add_child(_crt_rect)
-	# 应用已保存的 CRT 设置
+	# 应用已保存的 CRT 设置与开关
 	_apply_crt_params()
+	set_crt_enabled(crt_enabled)
 
 
 # 开关 CRT 效果(默认开)
@@ -257,6 +259,8 @@ func _load_settings() -> void:
 	var data: Variant = JSON.parse_string(f.get_as_text())
 	if not (data is Dictionary):
 		return
+	if data.has("crt_enabled"):
+		crt_enabled = bool(data["crt_enabled"])
 	if data.has("crt_strength"):
 		crt_strength = clampf(float(data["crt_strength"]), 0.0, 1.0)
 	if data.has("crt_aberration"):
@@ -271,6 +275,7 @@ func _save_settings() -> void:
 	if f == null:
 		return
 	f.store_string(JSON.stringify({
+		"crt_enabled": crt_enabled,
 		"crt_strength": crt_strength,
 		"crt_aberration": crt_aberration,
 		"crt_curve": crt_curve,
