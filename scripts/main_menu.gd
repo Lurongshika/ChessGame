@@ -52,6 +52,17 @@ func _ready() -> void:
 	add_child(btn6)
 	menu_btns.append(btn6)
 
+	# 版本号(左下角,点击弹出版本更新概览)
+	var version_btn := Button.new()
+	version_btn.text = "v1.7"
+	version_btn.position = Vector2(16, 720 - 44 - 8)
+	version_btn.size = Vector2(90, 36)
+	version_btn.add_theme_font_override("font", _font())
+	version_btn.add_theme_font_size_override("font_size", 15)
+	Global.style_flat_button(version_btn)
+	version_btn.pressed.connect(_show_version)
+	add_child(version_btn)
+
 	# 按钮组在标题下方空间垂直居中(按钮数量变化时不再顶到屏幕下方)
 	_center_menu()
 	_build_user_button()
@@ -266,6 +277,57 @@ func _show_settings() -> void:
 
 	_animate_opt_extra_buttons([])
 	_add_option_button("返回", Vector2(540, 520), _close_options)
+
+
+# 版本更新概览(左下角版本号点击弹出)
+func _show_version() -> void:
+	if opt_root != null:
+		opt_root.queue_free()
+	opt_root = _make_option_layer()
+	_set_menu_visible(false)
+	var title := _label("版本更新概览", 28, Color(0.95, 0.85, 0.6))
+	title.position = Vector2(0, 130)
+	title.size = Vector2(1280, 36)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	opt_root.add_child(title)
+
+	var scroll := ScrollContainer.new()
+	scroll.position = Vector2(220, 180)
+	scroll.size = Vector2(840, 400)
+	opt_root.add_child(scroll)
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 10)
+	scroll.add_child(content)
+
+	var entries := [
+		"v1.7",
+		"· 四人模式红/黑过河兵可横走修复",
+		"· 新增'帅将不能面对面'规则",
+		"· 技能数量(1-4)与选牌重置(8选3未选可重抽)",
+		"· 大厅观战席(不占席位,仅观看)",
+		"· 对局记录改为坐标点对 (x,y)→(x,y)",
+		"· 死亡中毒机制、魔术师/逆位、倒吊人/世界本次修复",
+		"· AI 增强(negamax+quiescence+位置表)",
+		"",
+		"v1.6",
+		"· 塔罗卡牌技能、死亡状态等",
+		"",
+		"v1.5",
+		"· 技能卡展示与选牌界面",
+	]
+	for e in entries:
+		var color := Color(0.85, 0.82, 0.75) if not e.is_empty() and not e.begins_with("v") else Color(1.0, 0.9, 0.55)
+		var sz := 16 if not e.is_empty() and not e.begins_with("v") else 20
+		var l := _label(e, sz, color)
+		if not e.is_empty():
+			content.add_child(l)
+		else:
+			content.add_child(_label("　", 12, color))
+
+	var close := _button("关闭", Vector2(590, 610))
+	close.pressed.connect(_close_options)
+	opt_root.add_child(close)
 
 
 var net_mode := "skill"
