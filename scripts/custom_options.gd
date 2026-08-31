@@ -100,7 +100,7 @@ func setup(font: Font, on_change: Callable) -> void:
 	}, rules.get("promotion", "queen"), func(k: String): rules["promotion"] = k; _save())
 
 	# 技能数量(1-4)
-	_add_title(content, "技能数量(每位玩家抽取数, 1-4)", 0)
+	_add_title(content, "技能数量(1-4)", 0)
 	var sc := SpinBox.new()
 	sc.min_value = 1
 	sc.max_value = 4
@@ -110,9 +110,10 @@ func setup(font: Font, on_change: Callable) -> void:
 	sc.value_changed.connect(func(_v: float): rules["skill_count"] = int(sc.value); _save())
 	content.add_child(sc)
 
-	# 选牌重置开关(默认关)
+	# 选牌重置开关(默认关):与其他选项一致的"标题+开关"副标题格式,不带注释说明
+	_add_title(content, "选牌重置", 0)
 	var reroll_chk := CheckButton.new()
-	reroll_chk.text = "选牌重置:8选3时未选技能可重抽(已选保留)"
+	reroll_chk.text = "开启"
 	reroll_chk.button_pressed = bool(rules.get("reroll", false))
 	reroll_chk.add_theme_font_override("font", font)
 	reroll_chk.add_theme_font_size_override("font_size", 14)
