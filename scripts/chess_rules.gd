@@ -384,12 +384,12 @@ static func _pawn_moves(board: Array, pos: Vector2i, side: int, perks: Dictionar
 	var moves: Array[Vector2i] = []
 	var fwd: Vector2i = pawn_fwd(side)
 	var crossed: bool
-	if side == Side.RED:
+	if board.size() == 17:
+		crossed = not in_arm4(pos, side)  # 四人:离开己方半场=过河(四方都适用)
+	elif side == Side.RED:
 		crossed = pos.y <= 4
-	elif side == Side.BLACK:
-		crossed = pos.y >= 5
 	else:
-		crossed = not in_arm4(pos, side)  # 四人:离开己方半场=过河
+		crossed = pos.y >= 5
 	var t: Vector2i = pos + fwd
 	if in_board(t, board):
 		moves.append(t)
