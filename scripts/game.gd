@@ -690,6 +690,10 @@ func _refresh_perk_panels4() -> void:
 
 
 # 四人:主动技能是否"就绪"(冷却完毕/充能满)
+func _skill_need() -> int:
+	return clampi(int(Global.game_rules.get("skill_count", 3)), 1, 4)
+
+
 func _skill_ready4(side: int, perk_id: String) -> bool:
 	if perk_id == "huanghou":
 		var cap := 3 if perks4[side].has("liliang2") else 1
@@ -1526,7 +1530,7 @@ func _begin_four_draft_host() -> void:
 		if ai_group.is_empty():
 			continue
 		ai_group.shuffle()
-		four_draft_picks[si] = [ai_group[0], ai_group[1], ai_group[2]]
+		four_draft_picks[si] = ai_group.slice(0, _skill_need())
 		perks4[si] = {}
 		for id in four_draft_picks[si]:
 			perks4[si][id] = true
@@ -1650,7 +1654,7 @@ func _auto_pick_four_client() -> void:
 	if phase != Phase.SKILL_DRAFT or draft4_options.is_empty():
 		return
 	_draft_selected4 = []
-	for i in mini(3, draft4_options.size()):
+	for i in mini(_skill_need(), draft4_options.size()):
 		_draft_selected4.append(draft4_options[i])
 	_confirm_draft4()
 
@@ -3167,8 +3171,9 @@ func _reroll_draft4() -> void:
 func _confirm_draft4() -> void:
 	if phase != Phase.SKILL_DRAFT:
 		return
-	if _draft_selected4.size() != 3:
-		_show_status4("请选择 3 个技能(当前 %d 个)" % _draft_selected4.size())
+	var cneed := _skill_need()
+	if _draft_selected4.size() != cneed:
+		_show_status4("请选择 %d 个技能(当前 %d 个)" % [cneed, _draft_selected4.size()])
 		return
 	var side := draft4_side
 	perks4[side] = {}
@@ -3373,7 +3378,7 @@ func _update_draft_ui() -> void:
 			var reroll_btn := _make_button("重置(未选重抽)", Vector2(1280 / 2 + 110, 150 + 2 * 187 + 20), Vector2(230, 40))
 			reroll_btn.pressed.connect(_reroll_draft4)
 			draft_root.add_child(reroll_btn)
-		var hint := _make_label("点击技能卡选中/取消,选满 3 个后点确认", 16, Color(0.85, 0.82, 0.75))
+		var hint := _make_label("点击技能卡选中/取消,选满 %d 个后点确认" % need, 16, Color(0.85, 0.82, 0.75))
 		hint.position = Vector2(0, 108)
 		hint.size = Vector2(1280, 24)
 		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

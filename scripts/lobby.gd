@@ -221,7 +221,6 @@ func send_spectate(name: String, avatar_data: Dictionary) -> void:
 	# 已在玩家席位的不再重复;观战者不占席位
 	players.erase(pid)
 	spectators[pid] = {"name": name, "avatar_data": avatar_data}
-	print("LOBBY: 主动观战 pid=%d, spectators=%d" % [pid, spectators.size()])
 	_update_ui()
 	_sync_players.rpc(_players_to_data())
 
@@ -235,12 +234,10 @@ func send_profile(name: String, avatar_data: Dictionary) -> void:
 	# 玩家席位已满 → 该连接自动转为观战(不占席位)
 	if players.size() >= player_cap:
 		spectators[pid] = {"name": name, "avatar_data": avatar_data}
-		print("LOBBY: 玩家席位已满,pid=%d 转为观战; players=%d spectators=%d" % [pid, players.size(), spectators.size()])
 		_update_ui()
 		sync_room_info.rpc(Global.game_mode, Global.standard_mode)
 		_sync_players.rpc(_players_to_data())
 		return
-	print("LOBBY: 玩家加入 pid=%d, players=%d" % [pid, players.size() + 1])
 	# 按加入顺序:已有人数作为序号(host=0)
 	var max_order := 0
 	for p2 in players:

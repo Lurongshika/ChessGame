@@ -112,7 +112,7 @@ func setup(font: Font, on_change: Callable) -> void:
 
 	# 选牌重置开关(默认关)
 	var reroll_chk := CheckButton.new()
-	reroll_chk.text = "选牌重置:8选3时显示'重置'按钮,已选保留、未选重抽"
+	reroll_chk.text = "选牌重置:8选3时未选技能可重抽(已选保留)"
 	reroll_chk.button_pressed = bool(rules.get("reroll", false))
 	reroll_chk.add_theme_font_override("font", font)
 	reroll_chk.add_theme_font_size_override("font_size", 14)
