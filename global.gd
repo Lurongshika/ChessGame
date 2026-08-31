@@ -207,8 +207,9 @@ func _setup_crt() -> void:
 	mat.shader = load("res://shaders/crt.gdshader")
 	_crt_rect.material = mat
 	_crt_layer.add_child(_crt_rect)
-	# 应用已保存的 CRT 设置与开关
+	# 应用已保存的 CRT 设置;强度 0 = 关闭(隐藏,避免部分显卡闪黑线)
 	_apply_crt_params()
+	crt_enabled = crt_strength > 0.0
 	set_crt_enabled(crt_enabled)
 
 
@@ -231,6 +232,9 @@ func _apply_crt_params() -> void:
 # 设置 CRT 效果强度(0.0-1.0),保存到本地设置
 func set_crt_strength(v: float) -> void:
 	crt_strength = clampf(v, 0.0, 1.0)
+	# 强度 0 = CRT 关闭(隐藏 overlay,不运行 shader);否则开启
+	crt_enabled = crt_strength > 0.0
+	set_crt_enabled(crt_enabled)
 	_apply_crt_params()
 	_save_settings()
 
@@ -259,8 +263,6 @@ func _load_settings() -> void:
 	var data: Variant = JSON.parse_string(f.get_as_text())
 	if not (data is Dictionary):
 		return
-	if data.has("crt_enabled"):
-		crt_enabled = bool(data["crt_enabled"])
 	if data.has("crt_strength"):
 		crt_strength = clampf(float(data["crt_strength"]), 0.0, 1.0)
 	if data.has("crt_aberration"):
@@ -275,7 +277,6 @@ func _save_settings() -> void:
 	if f == null:
 		return
 	f.store_string(JSON.stringify({
-		"crt_enabled": crt_enabled,
 		"crt_strength": crt_strength,
 		"crt_aberration": crt_aberration,
 		"crt_curve": crt_curve,
